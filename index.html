@@ -105,7 +105,6 @@
             100% { background-color: #fff3bf; }
         }
 
-        /* 💥 標題提示：游標移上去會變手指，方便你點擊 5 次 */
         h1 { color: #4a4a4a; margin: 5px 0 15px 0; font-size: 26px; text-align: center; cursor: pointer; }
 
         #main-container {
@@ -369,7 +368,8 @@
         let mindfulTextInterval = null;
         let localIntervals = { 1: null, 2: null, 3: null };
 
-        let secretClickCount = 0; // 🔒 記錄點擊標題的次數
+        let secretClickCount = 0; 
+        let playerLogoutClickCount = 0; // 🌟 追蹤玩家點擊登出的次數
 
         let shootHighScores = [];
         let guessHighScores = [];
@@ -383,7 +383,6 @@
             }
         };
 
-        // 家長主題射擊庫
         const PARENT_WORDS = {
             zh: {
                 stress: ["催促起床 ⏰", "輔導功課 📝", "溫習考試 📚", "沉迷打機 📱", "學費開銷 💸", "挑食偏食 🥦", "收拾房間 🧺"],
@@ -488,7 +487,7 @@
             el.innerText = `${mins}:${secs}`;
         }
 
-        // 4. 登入系統權限
+        // 4. 登入與登出系統
         function handleLogin() {
             const user = document.getElementById('login-username').value.trim().toLowerCase();
             const pass = document.getElementById('login-password').value;
@@ -497,6 +496,9 @@
                 isAdmin = true; currentUser = 'admin';
             } else if ((user === 'player1' || user === 'player2' || user === 'player3') && pass === '123') {
                 isAdmin = false; currentUser = user.toUpperCase();
+                playerLogoutClickCount = 0; // 重設登出計數器
+                let num = user.replace('player', '');
+                database.ref(`massage_state/players/${num}`).update({ loggedIn: true });
             } else {
                 alert('帳號或密碼錯誤！'); return;
             }
@@ -506,15 +508,30 @@
             switchView('main-menu');
         }
 
+        // 🌟 核心修改：玩家點擊登出按鈕 5 次強制本地安全登出機制
         function handleLogout() {
-            if (currentUser && currentUser !== 'admin') {
-                alert(currentLang === 'zh' ? '系統禁止手動登出，請聯絡管理員使用後台指令。' : 'Logout disabled.');
+            // 如果目前是 admin 在後台，點一下直接登出
+            if (currentUser === 'admin') {
+                performLogoutLogic();
                 return;
             }
-            performLogoutLogic();
+
+            // 如果是 player1, 2, 3，必須連點 5 次
+            if (currentUser && currentUser.startsWith('PLAYER')) {
+                playerLogoutClickCount++;
+                // 前面 1~4 次不作任何警告、也不秀任何東西 (完全安靜)
+                if (playerLogoutClickCount >= 5) {
+                    playerLogoutClickCount = 0;
+                    performLogoutLogic(); // 點滿第 5 次，直接踢回登入畫面
+                }
+            }
         }
 
         function performLogoutLogic() {
+            if (currentUser && currentUser.startsWith('PLAYER')) {
+                let num = currentUser.replace('PLAYER', '');
+                database.ref(`massage_state/players/${num}`).update({ loggedIn: false });
+            }
             localStorage.removeItem('game_currentUser');
             localStorage.removeItem('game_isAdmin');
             currentUser = null; isAdmin = false;
@@ -544,7 +561,7 @@
             }
         }
 
-        // 5. 排行榜
+        // 排行榜控制
         function renderSeparateLeaderboards() {
             const shootUl = document.getElementById('shoot-leaderboard');
             const guessUl = document.getElementById('guess-leaderboard');
@@ -622,7 +639,7 @@
             }
         }
 
-        // 6. 遊戲與畫面切換
+        // 遊戲模組與場景切換
         function switchView(viewId) {
             clearInterval(shootTimerInterval); clearInterval(mindfulTextInterval);
             document.querySelectorAll('.target').forEach(t => t.remove());
@@ -716,7 +733,7 @@
             }, 4000);
         }
 
-        // 管理面板
+        // 管理面板控制
         function setMassageMode(mode) {
             selectedMode = mode;
             document.getElementById('mode-gun').classList.toggle('active', mode === '槍');
@@ -753,7 +770,7 @@
             if (bgm) { bgm.muted = !bgm.muted; document.getElementById('mute-btn-player').innerText = bgm.muted ? "🔇 已靜音" : "🔊 靜音"; }
         }
 
-        // 就座點擊機制
+        // 就座確認
         function confirmSeat() {
             let pNum = "1";
             if (currentUser && currentUser !== 'admin') {
@@ -762,9 +779,7 @@
 
             database.ref('massage_state/globalParentCounter').once('value', function(snapshot) {
                 let currentCount = snapshot.val() || 0;
-                
                 let inputName = prompt("✨ 歡迎就座體驗！\n\n您可以輸入您的暱稱，或直接點選確認/不填來跳過。");
-                
                 let finalDisplayName = "";
                 
                 if (inputName !== null && inputName.trim() !== "") {
@@ -797,31 +812,29 @@
             }
         }
 
-        // 🔒 核心安全修改：點擊大標題 5 次觸發後台
+        // 🔒 標題隱藏密鑰觸發機制
         function handleSecretTitleClick() {
-            if (!isAdmin) return; // 如果不是管理員帳號登入，點擊沒反應
-            
+            if (!isAdmin) return; 
             secretClickCount++;
-            
-            // 當點擊達到 5 次時
             if (secretClickCount >= 5) {
-                secretClickCount = 0; // 次數重設
+                secretClickCount = 0; 
                 const p = document.getElementById('troll-panel');
                 if (!p) return;
 
                 if (p.style.display === 'none') {
                     let secretInput = prompt("🔑 進入秘密通道！請輸入後台秘密安全碼：");
-                    if (secretInput === "open5a") { // 👈 秘密金鑰
+                    if (secretInput === "open5a") { 
                         p.style.display = 'block';
                     } else if (secretInput !== null) {
                         alert("❌ 安全碼錯誤！");
                     }
                 } else {
-                    p.style.display = 'none'; // 如果本來是開的，就直接關閉
+                    p.style.display = 'none';
                 }
             }
         }
 
+        // 🌟 移除說明中的舊指令
         function showAllCommandsHelp() {
             alert(
                 "=== 💻 密令後台完整指令清單 ===\n\n" +
@@ -840,11 +853,11 @@
                 "• .clear [1/2/3/all]          -> 清除所有惡搞狀態，恢復原狀\n\n" +
                 "【🔑 權限切換類】\n" +
                 "• begin player [1/2/3]\n" +
-                "• logout player [1/2/3]\n" +
                 "• logout admin"
             );
         }
 
+        // 后台指令核心處理常式（已移除 logout player []）
         function submitAdminCmd() {
             if (!isAdmin) return;
             const input = document.getElementById('cmds-input');
@@ -944,21 +957,17 @@
             if (rawCmd.toLowerCase().startsWith('begin player ')) {
                 const num = rawCmd.toLowerCase().replace('begin player ', '').trim();
                 if (['1', '2', '3'].includes(num)) {
+                    database.ref(`massage_state/players/${num}`).update({ loggedIn: true, needsSeat: false });
+                    
                     localStorage.setItem('game_currentUser', 'PLAYER' + num);
                     localStorage.setItem('game_isAdmin', 'false');
                     currentUser = 'PLAYER' + num; isAdmin = false;
-                    database.ref(`massage_state/players/${num}`).update({ loggedIn: true, needsSeat: false });
                     setupInterfaceBasedOnRole(); switchView('main-menu');
                 }
-            } else if (rawCmd.toLowerCase().startsWith('logout player ')) {
-                const num = rawCmd.toLowerCase().replace('logout player ', '').trim();
-                if (['1', '2', '3'].includes(num)) {
-                    database.ref(`massage_state/players/${num}`).update({ loggedIn: false, msg: "", effect: "", needsSeat: false, displayName: "PLAYER " + num });
-                    if (currentUser === 'PLAYER' + num) performLogoutLogic();
-                }
-            } else {
-                alert("未知密令。可以點擊上面的 See all cmds 按鈕查看哦！");
-            }
+                return;
+            } 
+
+            alert("未知密令。可以點擊上面的 See all cmds 按鈕查看哦！");
         }
 
         setupInterfaceBasedOnRole();
