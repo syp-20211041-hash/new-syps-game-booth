@@ -105,7 +105,8 @@
             100% { background-color: #fff3bf; }
         }
 
-        h1 { color: #4a4a4a; margin: 5px 0 15px 0; font-size: 26px; text-align: center; }
+        /* 💥 標題提示：游標移上去會變手指，方便你點擊 5 次 */
+        h1 { color: #4a4a4a; margin: 5px 0 15px 0; font-size: 26px; text-align: center; cursor: pointer; }
 
         #main-container {
             width: 100%; max-width: 800px;
@@ -156,9 +157,9 @@
         }
 
         .target {
-            width: 95px; height: 95px; color: white; border-radius: 50%; position: absolute;
+            width: 105px; height: 105px; color: white; border-radius: 50%; position: absolute;
             display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
-            font-size: 12px; font-weight: bold; padding: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            font-size: 11px; font-weight: bold; padding: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             animation: pop 0.2s ease-out; z-index: 10; cursor: pointer; line-height: 1.3;
         }
         .target * { pointer-events: none; }
@@ -193,7 +194,7 @@
         .leaderboard-list li:last-child { border-bottom: none; }
 
         /* 指令後台區塊 */
-        #admin-cmds-wrapper { display: none; width: 100%; max-width: 800px; margin-top: 15px; padding: 10px; border: 2px dashed #059669; border-radius: 10px; text-align: center; background: #f0fdf4; }
+        #admin-cmds-wrapper { display: none; width: 100%; max-width: 800px; margin-top: 15px; padding: 10px; text-align: center; }
         
         .see-all-btn {
             background-color: #3b82f6; color: white; border: none; padding: 4px 12px; 
@@ -225,6 +226,7 @@
             <div class="admin-p-row"><span>Player 1:</span><span id="admin-p1-clock">00:30</span></div>
             <div class="admin-p-row"><span>Player 2:</span><span id="admin-p2-clock">00:30</span></div>
             <div class="admin-p-row"><span>Player 3:</span><span id="admin-p3-clock">00:30</span></div>
+            <div class="admin-p-row" style="color:#d946ef; border-top:1px dashed #ccc; padding-top:2px;"><span>總人數計數:</span><span id="admin-global-counter">0</span></div>
         </div>
 
         <div class="admin-center-controls">
@@ -264,7 +266,7 @@
         <div id="player-broadcast-alert"></div>
     </div>
 
-    <h1 id="main-title">💥 家長壓力釋放娛樂中心 💥</h1>
+    <h1 id="main-title" onclick="handleSecretTitleClick()">💥 家長壓力釋放娛樂中心 💥</h1>
 
     <div id="main-container">
         <div id="login-view" class="view-panel active">
@@ -326,7 +328,6 @@
     </div>
 
     <div id="admin-cmds-wrapper">
-        <button onclick="toggleTrollPanel()" style="background: #10b981; color: #fff; padding: 5px 15px; border-radius: 5px; cursor: pointer; border: none; font-weight: bold;">💻 開啟/關閉指令後台</button>
         <div id="troll-panel" style="display: none; margin-top: 10px; background: #1e1e1e; color: #34d399; padding: 15px; text-align: left; font-family: monospace; border-radius: 8px;">
             <h4 style="margin: 0 0 5px 0; color: #6ee7b7;">💻 CMDS BAR 指令後台系統</h4>
             
@@ -368,19 +369,31 @@
         let mindfulTextInterval = null;
         let localIntervals = { 1: null, 2: null, 3: null };
 
+        let secretClickCount = 0; // 🔒 記錄點擊標題的次數
+
         let shootHighScores = [];
         let guessHighScores = [];
         let cloudState = {
             speedMultiplier: 1,
+            globalParentCounter: 0,
             players: {
-                1: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false },
-                2: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false },
-                3: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false }
+                1: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "第 1 位家長" },
+                2: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "第 2 位家長" },
+                3: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "第 3 位家長" }
             }
         };
 
-        const STRESS_WORDS = ["溫習測驗 📝", "功課繁重 📚", "睡眠不足 🥱", "時間不夠 ⏰", "排隊太長 ⏳"];
-        const HAPPY_WORDS = ["吃冰淇淋 🍦", "聽聽音樂 🎵", "睡個好覺 😴", "朋友聊天 💬", "放鬆大笑 😂"];
+        // 家長主題射擊庫
+        const PARENT_WORDS = {
+            zh: {
+                stress: ["催促起床 ⏰", "輔導功課 📝", "溫習考試 📚", "沉迷打機 📱", "學費開銷 💸", "挑食偏食 🥦", "收拾房間 🧺"],
+                happy: ["乖乖早睡 😴", "考試滿分 💯", "自律溫書 📖", "一杯咖啡 ☕", "私人時間 🎬", "家庭旅行 ✈️", "美味大餐 🍲"]
+            },
+            en: {
+                stress: ["Wake Up! ⏰", "Homework 📝", "Exam Prep 📚", "Screen Time 📱", "Expenses 💸", "Picky Eater 🥦", "Messy Room 🧺"],
+                happy: ["Sleep Early 😴", "Full Marks 💯", "Study Alone 📖", "Hot Coffee ☕", "Me-Time 🎬", "Trip! ✈️", "Great Dinner 🍲"]
+            }
+        };
 
         // 3. Firebase 監聽路徑
         database.ref('scores_shoot').on('value', function(snapshot) {
@@ -398,6 +411,11 @@
             if (!data) return;
             cloudState = data;
 
+            if (data.globalParentCounter !== undefined) {
+                const counterEl = document.getElementById('admin-global-counter');
+                if (counterEl) counterEl.innerText = data.globalParentCounter;
+            }
+
             if (data.players) {
                 if (data.players[1]) updateClockDisplay('admin-p1-clock', data.players[1].seconds);
                 if (data.players[2]) updateClockDisplay('admin-p2-clock', data.players[2].seconds);
@@ -410,7 +428,10 @@
                     let pData = data.players[pNum];
                     updateClockDisplay('lbl-player-clock', pData.seconds);
                     
-                    // 下一位按鈕邏輯：如果後台下了指令要求重坐
+                    if (pData.displayName) {
+                        document.getElementById('lbl-player-name').innerText = pData.displayName;
+                    }
+
                     if (pData.needsSeat) {
                         document.getElementById('ready-overlay').style.display = 'flex';
                     }
@@ -571,14 +592,26 @@
         }
 
         function uploadScoreToGameLeaderboard(gameType, name, score) {
-            if (gameType === 'shoot') {
-                shootHighScores.push({ name: name, score: parseInt(score) });
-                shootHighScores.sort((a, b) => b.score - a.score);
-                database.ref('scores_shoot').set(shootHighScores);
+            if (currentUser && currentUser !== 'admin') {
+                let pNum = currentUser.replace('PLAYER', '');
+                database.ref(`massage_state/players/${pNum}/displayName`).once('value', function(snap) {
+                    let finalName = snap.val() || name;
+                    saveToCloud(finalName);
+                });
             } else {
-                guessHighScores.push({ name: name, score: parseInt(score) });
-                guessHighScores.sort((a, b) => a.score - b.score);
-                database.ref('scores_guess').set(guessHighScores);
+                saveToCloud(name);
+            }
+
+            function saveToCloud(targetName) {
+                if (gameType === 'shoot') {
+                    shootHighScores.push({ name: targetName, score: parseInt(score) });
+                    shootHighScores.sort((a, b) => b.score - a.score);
+                    database.ref('scores_shoot').set(shootHighScores);
+                } else {
+                    guessHighScores.push({ name: targetName, score: parseInt(score) });
+                    guessHighScores.sort((a, b) => a.score - b.score);
+                    database.ref('scores_guess').set(guessHighScores);
+                }
             }
         }
 
@@ -589,7 +622,7 @@
             }
         }
 
-        // 6. 遊戲與功能
+        // 6. 遊戲與畫面切換
         function switchView(viewId) {
             clearInterval(shootTimerInterval); clearInterval(mindfulTextInterval);
             document.querySelectorAll('.target').forEach(t => t.remove());
@@ -633,12 +666,19 @@
             const isStress = Math.random() > 0.4;
             t.className = isStress ? 'target target-stress' : 'target target-happy';
             
-            let text = isStress ? STRESS_WORDS[Math.floor(Math.random() * STRESS_WORDS.length)] : HAPPY_WORDS[Math.floor(Math.random() * HAPPY_WORDS.length)];
-            t.innerHTML = isStress ? `<span>🔴 壓力</span><strong>${text}</strong>` : `<span>🟢 放鬆</span><strong>${text}</strong>`;
+            let langSet = PARENT_WORDS[currentLang] || PARENT_WORDS['zh'];
+            let textList = isStress ? langSet.stress : langSet.happy;
+            let text = textList[Math.floor(Math.random() * textList.length)];
+            
+            if (currentLang === 'zh') {
+                t.innerHTML = isStress ? `<span>🔴 壓力心煩</span><strong>${text}</strong>` : `<span>🟢 放鬆療癒</span><strong>${text}</strong>`;
+            } else {
+                t.innerHTML = isStress ? `<span>🔴 Stress</span><strong>${text}</strong>` : `<span>🟢 Relief</span><strong>${text}</strong>`;
+            }
 
             const container = document.getElementById('main-container');
-            t.style.left = Math.max(10, Math.floor(Math.random() * (container.clientWidth - 105))) + 'px';
-            t.style.top = Math.max(55, Math.floor(Math.random() * (container.clientHeight - 110))) + 'px';
+            t.style.left = Math.max(10, Math.floor(Math.random() * (container.clientWidth - 115))) + 'px';
+            t.style.top = Math.max(55, Math.floor(Math.random() * (container.clientHeight - 120))) + 'px';
             shootView.appendChild(t);
         }
 
@@ -713,37 +753,88 @@
             if (bgm) { bgm.muted = !bgm.muted; document.getElementById('mute-btn-player').innerText = bgm.muted ? "🔇 已靜音" : "🔊 靜音"; }
         }
 
-        // 玩家重新點擊安全點擊層按鈕
+        // 就座點擊機制
         function confirmSeat() {
-            const bgm = document.getElementById('timer-bgm');
-            if (bgm) { bgm.play().then(() => { bgm.pause(); bgm.currentTime = 0; }).catch(e => console.log(e)); }
-            document.getElementById('ready-overlay').style.display = 'none';
-            
-            // 點擊之後解除 needsSeat 狀態，並把時間歸為預設的 30 秒，關閉可能殘留的惡搞效果
+            let pNum = "1";
             if (currentUser && currentUser !== 'admin') {
-                let pNum = currentUser.replace('PLAYER', '');
-                database.ref(`massage_state/players/${pNum}`).update({ needsSeat: false, seconds: 30, isRunning: false, effect: "", msg: "" });
+                pNum = currentUser.replace('PLAYER', '');
+            }
+
+            database.ref('massage_state/globalParentCounter').once('value', function(snapshot) {
+                let currentCount = snapshot.val() || 0;
+                
+                let inputName = prompt("✨ 歡迎就座體驗！\n\n您可以輸入您的暱稱，或直接點選確認/不填來跳過。");
+                
+                let finalDisplayName = "";
+                
+                if (inputName !== null && inputName.trim() !== "") {
+                    finalDisplayName = inputName.trim();
+                    proceed(finalDisplayName, currentCount);
+                } else {
+                    currentCount += 1;
+                    finalDisplayName = "第 " + currentCount + " 位家長";
+                    database.ref('massage_state').update({ globalParentCounter: currentCount }, function() {
+                        proceed(finalDisplayName, currentCount);
+                    });
+                }
+            });
+
+            function proceed(nameToSet, countVal) {
+                const bgm = document.getElementById('timer-bgm');
+                if (bgm) { bgm.play().then(() => { bgm.pause(); bgm.currentTime = 0; }).catch(e => console.log(e)); }
+                document.getElementById('ready-overlay').style.display = 'none';
+                
+                if (currentUser && currentUser !== 'admin') {
+                    database.ref(`massage_state/players/${pNum}`).update({ 
+                        needsSeat: false, 
+                        seconds: 30, 
+                        isRunning: false, 
+                        effect: "", 
+                        msg: "",
+                        displayName: nameToSet
+                    });
+                }
             }
         }
 
-        function toggleTrollPanel() {
-            if (!isAdmin) return;
-            const p = document.getElementById('troll-panel');
-            if (p) p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+        // 🔒 核心安全修改：點擊大標題 5 次觸發後台
+        function handleSecretTitleClick() {
+            if (!isAdmin) return; // 如果不是管理員帳號登入，點擊沒反應
+            
+            secretClickCount++;
+            
+            // 當點擊達到 5 次時
+            if (secretClickCount >= 5) {
+                secretClickCount = 0; // 次數重設
+                const p = document.getElementById('troll-panel');
+                if (!p) return;
+
+                if (p.style.display === 'none') {
+                    let secretInput = prompt("🔑 進入秘密通道！請輸入後台秘密安全碼：");
+                    if (secretInput === "open5a") { // 👈 秘密金鑰
+                        p.style.display = 'block';
+                    } else if (secretInput !== null) {
+                        alert("❌ 安全碼錯誤！");
+                    }
+                } else {
+                    p.style.display = 'none'; // 如果本來是開的，就直接關閉
+                }
+            }
         }
 
         function showAllCommandsHelp() {
             alert(
                 "=== 💻 密令後台完整指令清單 ===\n\n" +
                 "【🔄 下一位就座機制】\n" +
-                "• .next [1/2/3/all]        -> 不登出，但把玩家踢回「請就座」按鈕畫面\n\n" +
+                "• .next [1/2/3/all]        -> 不登出，但把玩家踢回「請就座」按鈕畫面\n" +
+                "• .setcount [數字]        -> 自訂更改目前家長總計數流水號 (例如: .setcount 10)\n\n" +
                 "【⏱️ 時間管理類】\n" +
                 "• .set [1/2/3/all] [秒數]  -> 強制設定倒數時間\n\n" +
                 "【📢 訊息廣播類】\n" +
                 "• .w [1/2/3/all] [訊息]    -> 玩家畫面上跳出通知跑馬燈\n\n" +
                 "【🎭 惡搞彩蛋類 (Funny Hacks)】\n" +
                 "• .troll [1/2/3/all] matrix   -> 畫面變成黑客綠色代碼風格\n" +
-                "• .troll [1/2/3/all] shake    -> 讓玩家螢幕發瘋震動 (模擬地震)\n" +
+                "• .troll [1/2/3/all] shake    -> 讓玩家螢幕發瘋震動\n" +
                 "• .troll [1/2/3/all] reverse  -> 遊戲畫面直接上下顛倒 180 度\n" +
                 "• .troll [1/2/3/all] flash    -> 蹦迪霓虹燈閃爍效果\n" +
                 "• .clear [1/2/3/all]          -> 清除所有惡搞狀態，恢復原狀\n\n" +
@@ -766,7 +857,18 @@
                 return;
             }
 
-            // 新增功能：下一位機制 .next [player]
+            if (rawCmd.startsWith('.setcount ')) {
+                const parts = rawCmd.split(' ');
+                if (parts.length >= 2) {
+                    const newCount = parseInt(parts[1]);
+                    if (!isNaN(newCount)) {
+                        database.ref('massage_state').update({ globalParentCounter: newCount });
+                        alert("全局家長計數已設定為: " + newCount);
+                    } else { alert("請輸入正確的數字！"); }
+                }
+                return;
+            }
+
             if (rawCmd.startsWith('.next ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 2) {
@@ -780,7 +882,6 @@
                 return;
             }
 
-            // 指令：時間設定 .set [player] [seconds]
             if (rawCmd.startsWith('.set ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
@@ -797,7 +898,6 @@
                 return;
             }
 
-            // 指令：寫字廣播 .w [player] [msg]
             if (rawCmd.startsWith('.w ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
@@ -813,7 +913,6 @@
                 return;
             }
 
-            // 指令：全新惡搞整蠱功能 .troll [player] [type]
             if (rawCmd.startsWith('.troll ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
@@ -829,7 +928,6 @@
                 return;
             }
 
-            // 指令：清除效果 .clear [player]
             if (rawCmd.startsWith('.clear ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 2) {
@@ -843,7 +941,6 @@
                 return;
             }
 
-            // 原有指令
             if (rawCmd.toLowerCase().startsWith('begin player ')) {
                 const num = rawCmd.toLowerCase().replace('begin player ', '').trim();
                 if (['1', '2', '3'].includes(num)) {
@@ -856,7 +953,7 @@
             } else if (rawCmd.toLowerCase().startsWith('logout player ')) {
                 const num = rawCmd.toLowerCase().replace('logout player ', '').trim();
                 if (['1', '2', '3'].includes(num)) {
-                    database.ref(`massage_state/players/${num}`).update({ loggedIn: false, msg: "", effect: "", needsSeat: false });
+                    database.ref(`massage_state/players/${num}`).update({ loggedIn: false, msg: "", effect: "", needsSeat: false, displayName: "PLAYER " + num });
                     if (currentUser === 'PLAYER' + num) performLogoutLogic();
                 }
             } else {
@@ -864,7 +961,6 @@
             }
         }
 
-        // 初始化
         setupInterfaceBasedOnRole();
     </script>
 </body>
