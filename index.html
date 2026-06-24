@@ -276,6 +276,47 @@
 
 
     <script>
+      function renderLeaderboardUI(list) {
+    const ul = document.getElementById('leaderboard-list'); // 或者是你原本的 ul ID
+    if (!ul) return;
+    ul.innerHTML = '';
+
+    // 新規格 ④：清空後顯示全空
+    if (!list || list.length === 0) {
+        ul.innerHTML = `<li>${currentLang === 'zh' ? '目前排行榜全空，等待新挑戰者！' : 'Leaderboard is empty!'}</li>`;
+        return;
+    }
+
+    list.forEach((player, index) => {
+        const li = document.createElement('li');
+        
+        // 新規格 ③ & ⑤：自動過濾 N/A 或 沒有
+        let safeName = formatPlayerName(player.name, index + 1);
+        
+        li.innerHTML = `
+            <span>No.${index + 1} - ${safeName} : ${player.score} 分</span>
+            ${isAdmin ? `<button onclick="deleteLeaderboardItem(${index})" style="color:red; background:none; border:none; cursor:pointer; margin-left:10px;">❌</button>` : ''}
+        `;
+        ul.appendChild(li);
+    });
+}
+
+// 名字防呆過濾器
+function formatPlayerName(inputName, num) {
+    if (!inputName) return `使用者(${num})`;
+    const check = inputName.trim().toUpperCase();
+    if (check === 'N/A' || check === '沒有' || check === '') {
+        return `使用者(${num})`;
+    }
+    return inputName;
+}
+
+// 點擊 ❌ 從 Firebase 刪除特定排行資料
+function deleteLeaderboardItem(index) {
+    if (!isAdmin) return;
+    let currentList = cloudState.leaderboard || [];
+    currentList.splice(index, 1);
+    dbRef.update({ leaderboard: currentList });
       function confirmSeat() {
     // 1. 取得音訊元件
     const bgm = document.getElementById('timer-bgm');
