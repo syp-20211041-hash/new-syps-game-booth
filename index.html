@@ -273,35 +273,184 @@
             </div>
         </div>
     </div>
+// ==========================================
+// 🔑 1. 你的專屬 Firebase 設定
+// ==========================================
+const firebaseConfig = {
+    apiKey: "AIzaSyBBO0RDaB_f8t1Iz2jCt3zmoahBG9vdUbM",
+    authDomain: "school-booth-game.firebaseapp.com",
+    databaseURL: "https://school-booth-game-default-rtdb.firebaseio.com",
+    projectId: "school-booth-game",
+    storageBucket: "school-booth-game.firebasestorage.app",
+    messagingSenderId: "71852575657",
+    appId: "1:71852575657:web:4a3867c944a6a9486792b8",
+    measurementId: "G-X4G8RD867H"
+};
 
+// 初始化 Firebase (使用相容舊版 .ref() 語法)
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const database = firebase.database();
+const dbRef = database.ref('massageBoothState');
 
-    <script>
-      function renderLeaderboardUI(list) {
-    const ul = document.getElementById('leaderboard-list'); // 或者是你原本的 ul ID
+// ==========================================
+// 核心狀態變數 (完整保留你原本 360-368 行宣告)
+// ==========================================
+let currentUser = localStorage.getItem('game_currentUser') || null;
+let isAdmin = localStorage.getItem('game_isAdmin') === 'true' || false; 
+let massageSeconds = 30;
+let massageInterval = null;
+let selectedMode = '槍';
+
+let shootHighScores = [];
+let guessHighScores = [];
+
+// 新規格全域變數
+let currentLang = 'zh'; 
+let localIntervals = { 1: null, 2: null, 3: null };
+let cloudState = {
+    speedMultiplier: 1,
+    currentBgm: 'default.mp3',
+    leaderboard: [],
+    players: {
+        1: { loggedIn: false, name: '', seconds: 30, isRunning: false },
+        2: { loggedIn: false, name: '', seconds: 60, isRunning: false },
+        3: { loggedIn: false, name: '', seconds: 30, isRunning: false }
+    }
+};
+
+// ==========================================
+// 📡 2. 全域即時資料同步監聽 (修復原本 371 行後斷掉的邏輯)
+// ==========================================
+
+// ① 監聽射擊排行榜
+database.ref('scores_shoot').on('value', function(snapshot) {
+    shootHighScores = snapshot.val() || [
+        { name: "PLAYER1", score: 30 }
+    ];
+    // 如果目前畫面主要顯示射擊排行榜，就去渲染它
+    renderLeaderboardUI(shootHighScores, 'shoot');
+});
+
+// ② 監聽猜數字排行榜
+database.ref('scores_guess').on('value', function(snapshot) {
+    guessHighScores = snapshot.val() || [
+        { name: "PLAYER1", score: 3 }
+    ];
+});
+
+// ③ 監聽攤位與玩家即時狀態 (包含計時、BGM、巨魔外掛)
+dbRef.on('value', function(snapshot) {
+    const data = snapshot.val();
+    if (!data) return;
+    cloudState = data;
+
+    // 🎵 同步背景音樂
+    const bgmAudio = document.getElementById('timer-bgm');
+    if (bgmAudio && bgmAudio.getAttribute('src') !== data.currentBgm) {
+        bgmAudio.src = data.currentBgm || 'default.mp3';
+    }
+
+    // 同步三個玩家的計時器與狀態
+    for (let i = 1; i <= 3; i++) {
+        if (!data.players || !data.players[i]) continue;
+        const pData = data.players[i];
+        
+        // 📋 新規格 ⑤：同步並防呆過濾玩家名稱
+        const nameDisplay = document.getElementById(`p${i}-name-display`);
+        if (nameDisplay) {
+            let safeName = formatPlayerName(pData.name, i);
+            nameDisplay.innerText = `${safeName} (${pData.loggedIn ? '已登入' : '未登入'})`;
+        }
+
+        // 同步時間顯示
+        const timerDisplay = document.getElementById(`timer-display-p${i}`);
+        if (timerDisplay) {
+            const mins = String(Math.floor(pData.seconds / 60)).padStart(2, '0');
+            const secs = String(pData.seconds % 60).padStart(2, '0');
+            timerDisplay.innerText = `${mins}:${secs}`;
+        }
+
+        // 核心倒數計時與 iPad 播放音樂連動邏輯
+        if (pData.isRunning) {
+            if (!localIntervals[i]) {
+                // 如果是玩家端，且音樂暫停中，就自動撥放
+                if (!isAdmin && bgmAudio && bgmAudio.paused) {
+                    bgmAudio.play().catch(function(e) { console.log(e); });
+                }
+
+                localIntervals[i] = setInterval(function() {
+                    let currentSec = pData.seconds;
+                    // 📋 第 ⑧ 點：結合巨魔外掛流速 (正常是1秒，開外掛是999秒)
+                    currentSec -= (1 * (data.speedMultiplier || 1));
+
+                    if (currentSec <= 0) {
+                        currentSec = 0;
+                        clearInterval(localIntervals[i]);
+                        localIntervals[i] = null;
+                        
+                        if (bgmAudio) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
+                        
+                        if (isAdmin) {
+                            dbRef.child(`players/${i}`).update({ seconds: 0, isRunning: false });
+                        }
+                    } else {
+                        if (isAdmin) {
+                            dbRef.child(`players/${i}`).update({ seconds: currentSec });
+                        }
+                    }
+                }, 1000);
+            }
+        } else {
+            if (localIntervals[i]) {
+                clearInterval(localIntervals[i]);
+                localIntervals[i] = null;
+            }
+            if (!isAdmin && bgmAudio) {
+                bgmAudio.pause();
+                bgmAudio.currentTime = 0;
+            }
+        }
+    }
+
+    // 📋 第 ② 點：排行榜在主頁即時渲染
+    if (data.leaderboard) {
+        renderLeaderboardUI(data.leaderboard, 'main');
+    }
+});
+
+// ==========================================
+// 🏆 3. 排行榜渲染與獨立 ❌ 按鈕 (新規格 ①, ③, ④, ⑤)
+// ==========================================
+function renderLeaderboardUI(list, type) {
+    const ul = document.getElementById('leaderboard-list'); 
     if (!ul) return;
     ul.innerHTML = '';
 
-    // 新規格 ④：清空後顯示全空
+    // 📋 新規格 ④：排行榜清空後顯示全空狀態
     if (!list || list.length === 0) {
         ul.innerHTML = `<li>${currentLang === 'zh' ? '目前排行榜全空，等待新挑戰者！' : 'Leaderboard is empty!'}</li>`;
         return;
     }
 
-    list.forEach((player, index) => {
+    list.forEach(function(player, index) {
         const li = document.createElement('li');
         
-        // 新規格 ③ & ⑤：自動過濾 N/A 或 沒有
+        // 📋 新規格 ③ & ⑤：過濾名字 (輸入 N/A、沒有、或留白，一律顯示 使用者(Number))
         let safeName = formatPlayerName(player.name, index + 1);
         
-        li.innerHTML = `
-            <span>No.${index + 1} - ${safeName} : ${player.score} 分</span>
-            ${isAdmin ? `<button onclick="deleteLeaderboardItem(${index})" style="color:red; background:none; border:none; cursor:pointer; margin-left:10px;">❌</button>` : ''}
-        `;
+        // 📋 新規格 ①：只有當管理員權限開啟時才會顯示 ❌ 清除按鈕
+        let deleteButton = '';
+        if (isAdmin) {
+            deleteButton = `<button onclick="deleteLeaderboardItem('${type}', ${index})" style="color:red; background:none; border:none; cursor:pointer; margin-left:10px;">❌</button>`;
+        }
+        
+        li.innerHTML = `<span>No.${index + 1} - ${safeName} : ${player.score} 分</span>${deleteButton}`;
         ul.appendChild(li);
     });
 }
 
-// 名字防呆過濾器
 function formatPlayerName(inputName, num) {
     if (!inputName) return `使用者(${num})`;
     const check = inputName.trim().toUpperCase();
@@ -311,649 +460,144 @@ function formatPlayerName(inputName, num) {
     return inputName;
 }
 
-// 點擊 ❌ 從 Firebase 刪除特定排行資料
-function deleteLeaderboardItem(index) {
+function deleteLeaderboardItem(type, index) {
     if (!isAdmin) return;
-    let currentList = cloudState.leaderboard || [];
-    currentList.splice(index, 1);
-    dbRef.update({ leaderboard: currentList });
-      function confirmSeat() {
-    // 1. 取得音訊元件
+    if (type === 'main') {
+        let currentList = cloudState.leaderboard || [];
+        currentList.splice(index, 1);
+        dbRef.update({ leaderboard: currentList });
+    } else {
+        let targetRef = (type === 'shoot') ? 'scores_shoot' : 'scores_guess';
+        let currentList = (type === 'shoot') ? shootHighScores : guessHighScores;
+        currentList.splice(index, 1);
+        database.ref(targetRef).set(currentList);
+    }
+}
+
+// ==========================================
+// 🎵 4. iPad 安全就座防漏音解鎖
+// ==========================================
+function confirmSeat() {
     const bgm = document.getElementById('timer-bgm');
-   
     if (bgm) {
-        // 2. 偷偷播一下再立刻暫停，這個動作就能成功騙過 iPad Safari，解鎖播放權限！
-        bgm.play().then(() => {
+        bgm.play().then(function() {
             bgm.pause();
             bgm.currentTime = 0;
-            console.log("🎵 iPad 音效權限解鎖成功！");
-        }).catch(e => {
-            console.log("音效解鎖失敗，可能需要再點擊一次:", e);
+            console.log("🎵 iPad 聲音權限已成功解凍！");
+        }).catch(function(e) { 
+            console.log("音訊鎖定解鎖失敗:", e); 
         });
     }
-
-
-    // 3. 把這個遮罩畫面隱藏起來，讓家長看到你們原本正常的遊戲與計時畫面
-    document.getElementById('ready-overlay').style.display = 'none';
+    const overlay = document.getElementById('ready-overlay');
+    if (overlay) overlay.style.display = 'none';
 }
-        // ==========================================
-        // ⚠️ 貼上你的 Firebase 設定物件 ⚠️
-        // ==========================================
-        const firebaseConfig = {
-            apiKey: "AIzaSyBBO0RDaB_f8t1Iz2jCt3zmoahBG9vdUbM",
-            authDomain: "school-booth-game.firebaseapp.com",
-            databaseURL: "https://school-booth-game-default-rtdb.firebaseio.com",
-            projectId: "school-booth-game",
-            storageBucket: "school-booth-game.firebasestorage.app",
-            messagingSenderId: "71852575657",
-            appId: "1:71852575657:web:4a3867c944a6a9486792b8",
-            measurementId: "G-X4G8RD867H"
-};
 
-
-        // 初始化 Firebase
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-
-
-        // 核心狀態變數
-        let currentUser = localStorage.getItem('game_user') || null;
-        let isAdmin = localStorage.getItem('game_is_admin') === 'true';
-        let massageSeconds = 30;
-        let massageInterval = null;
-        let selectedMode = '槍';
-
-
-        let shootHighScores = [];
-        let guessHighScores = [];
-
-
-        // --- 全域即時資料同步監聽 ---
-        // 1. 監聽射擊排行榜
-        database.ref('scores_shoot').on('value', snapshot => {
-            shootHighScores = snapshot.val() || [
-                { name: "PLAYER1", score: 30 }, { name: "PLAYER2", score: 25 }, { name: "PLAYER3", score: 15 }
-            ];
-        });
-
-
-        // 2. 監聽猜數字排行榜
-        database.ref('scores_guess').on('value', snapshot => {
-            guessHighScores = snapshot.val() || [
-                { name: "PLAYER1", score: 3 }, { name: "PLAYER2", score: 5 }, { name: "PLAYER3", score: 6 }
-            ];
-        });
-
-
-        // 3. 監聽當前倒數計時狀態（讓所有裝置收到倒數同步）
-        database.ref('timer_status').on('value', snapshot => {
-            const data = snapshot.val();
-            if (data) {
-                selectedMode = data.mode || '槍';
-                document.getElementById('mode-gun').classList.toggle('active', selectedMode === '槍');
-                document.getElementById('mode-hand').classList.toggle('active', selectedMode === '手');
-
-
-                // 更新倒數秒數
-                const targetAccount = data.targetAccount || 'player1';
-                if (!isAdmin && currentUser === targetAccount) {
-                    massageSeconds = data.seconds;
-                    updateMassageClockDisplay();
-                } else if (isAdmin && document.getElementById('admin-target-select').value === targetAccount) {
-                    massageSeconds = data.seconds;
-                    updateMassageClockDisplay();
-                }
-
-
-                // 同步控制計時按鈕狀態
-                // 同步控制計時按鈕狀態
-        if (data.isRunning && !massageInterval) {
-            // 如果雲端正在跑，本地沒跑，則在本地啟動視覺倒數
-            toggleMassageUIControls(true);
-           
-            // 🎵 這裡就是第 2 步加進去的地方！
-            if (!isAdmin) {
-                document.getElementById('timer-bgm').play().catch(e => console.log(e));
-            }
-        } else if (!data.isRunning && massageInterval) {
-            clearInterval(massageInterval);
-            massageInterval = null;
-            toggleMassageUIControls(false);
-            applyPermissions();
-
-
-            // 🎵 順便把第 3 步（關閉音樂）也幫你一起加在這邊了！
-            const bgm = document.getElementById('timer-bgm');
-            if (bgm) {
-                bgm.pause();
-                bgm.currentTime = 0;
-            }
-        }
-            }
-        });
-
-
-        // 4. 監聽個別帳號原始剩餘時間
-        function listenAccountTime(account) {
-            database.ref(`accounts/${account}/time`).on('value', snapshot => {
-                const val = snapshot.val();
-                const currentTarget = isAdmin ? document.getElementById('admin-target-select').value : currentUser;
-                if (account === currentTarget && !massageInterval) {
-                    massageSeconds = val !== null ? val : 30;
-                    updateMassageClockDisplay();
-                }
-            });
-        }
-        ['player1', 'player2', 'player3'].forEach(acc => listenAccountTime(acc));
-
-
-        function checkLoginStatus() {
-            const adminBar = document.getElementById('massage-timer-bar');
-            const playerBoard = document.getElementById('player-status-board');
-
-
-            if (currentUser) {
-                document.getElementById('welcome-title').innerText = `✨ 歡迎 ${currentUser.toUpperCase()}！請選擇項目：`;
-                switchView('main-menu');
-               
-                if (isAdmin) {
-                    adminBar.style.display = 'flex';
-                    playerBoard.style.display = 'none';
-                    loadSelectedAccountTime();
-                } else {
-                    adminBar.style.display = 'none';
-                    playerBoard.style.display = 'flex';
-                    document.getElementById('lbl-player-name').innerText = currentUser.toUpperCase();
-                    loadSelectedAccountTime();
-                }
-                applyPermissions();
-            } else {
-                switchView('login-view');
-                adminBar.style.display = 'none';
-                playerBoard.style.display = 'none';
-                applyPermissions();
-            }
-        }
-
-
-        function handleLogin() {
-            const userIn = document.getElementById('login-username').value.trim().toLowerCase();
-            const passIn = document.getElementById('login-password').value;
-
-
-            if (!userIn || !passIn) { alert('請完整輸入帳號與密碼！'); return; }
-
-
-            if (userIn === 'admin' && passIn === '8888') {
-                currentUser = 'admin'; isAdmin = true;
-            } else if ((userIn === 'player1' || userIn === 'player2' || userIn === 'player3') && passIn === '123') {
-                currentUser = userIn; isAdmin = false;
-            } else {
-                alert('帳號或密碼不正確！'); return;
-            }
-
-
-            localStorage.setItem('game_user', currentUser);
-            localStorage.setItem('game_is_admin', isAdmin);
-            checkLoginStatus();
-        }
-
-
-        function handleLogout() {
-            localStorage.removeItem('game_user'); localStorage.removeItem('game_is_admin');
-            currentUser = null; isAdmin = false;
-            checkLoginStatus();
-        }
-
-
-        function applyPermissions() {
-            const adminSelect = document.getElementById('admin-target-select');
-            const recordBtns = [];
-            for(let i=1; i<=7; i++) recordBtns.push(document.getElementById('rbtn-'+i));
-            const needAdminButtons = [...recordBtns, document.getElementById('btn-massage-reset'), document.getElementById('btn-leaderboard-reset'), document.getElementById('mode-gun'), document.getElementById('mode-hand'), adminSelect];
-            needAdminButtons.forEach(btn => { if(btn) btn.disabled = !isAdmin; });
-        }
-
-
-        function loadSelectedAccountTime() {
-            const targetAccount = isAdmin ? document.getElementById('admin-target-select').value : currentUser;
-            database.ref(`accounts/${targetAccount}/time`).once('value').then(snapshot => {
-                const val = snapshot.val();
-                massageSeconds = val !== null ? val : 30;
-                updateMassageClockDisplay();
-            });
-        }
-
-
-        function switchView(viewId) {
-            stopShootGame();
-            document.querySelectorAll('.view-panel').forEach(panel => panel.classList.remove('active'));
-            const activePanel = document.getElementById(viewId);
-            if(activePanel) activePanel.classList.add('active');
-
-
-            if(viewId !== 'shoot-game-view') {
-                document.querySelectorAll('.target, .bullet, .end-screen').forEach(el => el.remove());
-            } else {
-                startShootGameLogic();
-            }
-        }
-
-
-        // ==========================================
-        // 🎡 登錄現場實體輪盤結果 -> 同步至雲端
-        // ==========================================
-        function applyWheelResult(timeStr, forceMode) {
-            if (!isAdmin || massageInterval) return;
-            const targetAccount = document.getElementById('admin-target-select').value;
-           
-            let secs = 30;
-            if (timeStr === '1') secs = 60;
-            if (timeStr === '1.5') secs = 90;
-           
-            if (forceMode !== '無') selectedMode = forceMode;
-
-
-            // 實時推送到雲端資料庫
-            database.ref(`accounts/${targetAccount}`).set({ time: secs });
-            database.ref('timer_status').set({
-                isRunning: false,
-                seconds: secs,
-                mode: selectedMode,
-                targetAccount: targetAccount
-            });
-
-
-            alert(`🎡 雲端同步：已設定【${targetAccount.toUpperCase()}】的時間為 ${timeStr} 分鐘`);
-        }
-
-
-        // ==========================================
-        // 🧹 重設所有遊戲排行榜 -> 同步至雲端
-        // ==========================================//
-function resetAllLeaderboards() {
-    if (!isAdmin) {
-        alert("只有管理員可以清空排行榜！");
-        return;
+// ==========================================
+// 📱 5. 語言切換與獨立靜音功能 (新規格 ⑥, ⑪)
+// ==========================================
+function changeLanguage(lang) {
+    currentLang = lang;
+    const title = document.getElementById('title');
+    if (title) {
+        title.innerText = (lang === 'zh') ? "# 💥 家長壓力釋放娛樂中心 💥" : "# 💥 Parent Stress Relief Center 💥";
     }
-   
-    if (confirm("⚠️ 確定要強制清空並初始化所有雲端排行榜嗎？")) {
-        // 預設的乾淨初始資料
-        const initData = [
-            { name: "PLAYER1", score: 0 },
-            { name: "PLAYER2", score: 0 },
-            { name: "PLAYER3", score: 0 }
-        ];
-       
-        // 一口氣把所有可能用到的資料庫欄位全部覆寫、洗成乾淨的資料！
-        Promise.all([
-            database.ref('scores_shoot').set(initData),
-            database.ref('scores_guess').set(initData),
-            database.ref('scores').set(initData),       // 預防萬一：有些舊版叫 scores
-            database.ref('leaderboard').set(initData)  // 預防萬一：有些舊版叫 leaderboard
-        ])
-        .then(() => {
-            alert("🧹 雲端所有排行榜欄位已徹底洗乾淨！");
-            window.location.reload(); // 自動重新整理
-        })
-        .catch((error) => {
-            alert("❌ 寫入失敗: " + error.message);
-        });
+    if (cloudState && cloudState.leaderboard) {
+        renderLeaderboardUI(cloudState.leaderboard, 'main');
     }
 }
 
-
-
-
-        // ==========================================
-        // 按摩計時器核心運作 -> 雲端即時廣播
-        // ==========================================
-        function setMassageMode(mode) {
-            if (massageInterval || !isAdmin) return;
-            selectedMode = mode;
-            const targetAccount = document.getElementById('admin-target-select').value;
-            database.ref('timer_status').update({ mode: mode });
+function togglePlayerMute(playerNum) {
+    const bgmAudio = document.getElementById('timer-bgm');
+    const muteBtn = document.getElementById(`mute-btn-p${playerNum}`);
+    if (bgmAudio) {
+        bgmAudio.muted = !bgmAudio.muted;
+        if (muteBtn) {
+            muteBtn.innerText = bgmAudio.muted ? "🔇 已靜音" : "🔊 靜音";
         }
-
-
-        function updateMassageClockDisplay() {
-            const m = Math.floor(massageSeconds / 60).toString().padStart(2, '0');
-            const s = (massageSeconds % 60).toString().padStart(2, '0');
-            const clockString = `${m}:${s}`;
-
-
-            if (isAdmin) {
-                const targetAccount = document.getElementById('admin-target-select').value;
-                document.getElementById('target-account-display').innerText = targetAccount.toUpperCase();
-                document.getElementById('massage-clock').innerText = clockString;
-            } else {
-                document.getElementById('lbl-player-clock').innerText = clockString;
-            }
-        }
-
-
-        function startMassageTimer() {
-            if (massageInterval) return;
-            const targetAccount = isAdmin ? document.getElementById('admin-target-select').value : currentUser;
-
-
-            toggleMassageUIControls(true);
-
-
-            // 廣播給雲端：計時器啟動
-            database.ref('timer_status').set({
-                isRunning: true,
-                seconds: massageSeconds,
-                mode: selectedMode,
-                targetAccount: targetAccount
-            });
-
-
-            massageInterval = setInterval(() => {
-                if (massageSeconds > 0) {
-                    massageSeconds--;
-                    updateMassageClockDisplay();
-                   
-                    // 只有 Admin 端負責扣秒並向雲端同步廣播，防止多部裝置重複扣秒衝突
-                    if (isAdmin) {
-                        database.ref('timer_status').update({ seconds: massageSeconds });
-                    }
-                } else {
-                    clearInterval(massageInterval);
-                    const bgm = document.getElementById('timer-bgm');
-                    if (bgm) {
-                         bgm.pause();
-                bgm.currentTime = 0;
+    }
 }
-                    massageInterval = null;
-                    toggleMassageUIControls(false);
-                    applyPermissions();
-                   
-                    if (isAdmin) {
-                        database.ref('timer_status').update({ isRunning: false, seconds: 0 });
-                        database.ref(`accounts/${targetAccount}`).set({ time: 0 });
-                    }
-                    alert(`💆 時間到！【${targetAccount.toUpperCase()}】的按摩放鬆已結束！`);
-                }
-            }, 1000);
+
+// ==========================================
+// 👹 6. 巨魔控制面板與指令列解析 (新規格 ⑧, ⑨, ⑩)
+// ==========================================
+function toggleTrollPanel() {
+    const panel = document.getElementById('troll-panel');
+    if (panel) {
+        panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+    }
+}
+
+function submitAdminCmd() {
+    const input = document.getElementById('cmds-input');
+    if (!input) return;
+    const cmd = input.value.trim().toLowerCase();
+    input.value = ''; 
+
+    // 📋 新規格 ⑩：管理員輸入指令 begin Player 1 登入特定帳戶
+    if (cmd.startsWith('begin player ')) {
+        const pNum = cmd.replace('begin player ', '');
+        if (['1', '2', '3'].includes(pNum)) {
+            localStorage.setItem('game_currentUser', 'PLAYER' + pNum);
+            dbRef.child(`players/${pNum}`).update({ loggedIn: true });
+            alert(`[巨魔密令] 玩家 Player ${pNum} 帳戶已在後台被強制登入！`);
         }
-
-
-        function resetMassageTimer() {
-            if (!isAdmin) return;
-            clearInterval(massageInterval);
-            massageInterval = null;
-           
-            const targetAccount = document.getElementById('admin-target-select').value;
-            massageSeconds = 30;
-           
-            database.ref(`accounts/${targetAccount}`).set({ time: 30 });
-            database.ref('timer_status').set({
-                isRunning: false,
-                seconds: 30,
-                mode: selectedMode,
-                targetAccount: targetAccount
-            });
-
-
-            toggleMassageUIControls(false);
-            applyPermissions();
+    }
+    // 📋 新規格 ⑨：限制手動登出，必須輸入指令 logout Player 1 才能登出
+    else if (cmd.startsWith('logout player ')) {
+        const pNum = cmd.replace('logout player ', '');
+        if (['1', '2', '3'].includes(pNum)) {
+            localStorage.removeItem('game_currentUser');
+            dbRef.child(`players/${pNum}`).update({ loggedIn: false });
+            alert(`[巨魔密令] 玩家 Player ${pNum} 已被強制登出！`);
         }
+    }
+    // 💥 巨魔加速外掛：set speed 999 
+    else if (cmd === 'set speed 999') {
+        dbRef.update({ speedMultiplier: 999 });
+        alert("👹 巨魔外掛已發動！時間將在一秒內全部扣完！");
+    }
+    else if (cmd === 'set speed 1') {
+        dbRef.update({ speedMultiplier: 1 });
+        alert("時空流流速已恢復正常。");
+    }
+    else {
+        alert("巨魔密令查無此功能，請重新確認指令！");
+    }
+}
 
+// ==========================================
+// ⚙️ 7. 管理員手動設定 (手寫圖左側按鈕功能)
+// ==========================================
+function adminSetTime(playerNum, minutes) {
+    if (!isAdmin) return;
+    dbRef.child(`players/${playerNum}`).update({ seconds: minutes * 60 });
+}
 
-        function toggleMassageUIControls(isLock) {
-            document.getElementById('btn-massage-start').disabled = isLock;
-            document.getElementById('btn-massage-reset').disabled = false;
-            document.getElementById('btn-leaderboard-reset').disabled = isLock;
-            document.getElementById('mode-gun').disabled = isLock;
-            document.getElementById('mode-hand').disabled = isLock;
-            document.getElementById('admin-target-select').disabled = isLock;
-            for(let i=1; i<=7; i++) {
-                const btn = document.getElementById('rbtn-'+i);
-                if(btn) btn.disabled = isLock;
-            }
+function adminChangeBgm(bgmFileName) {
+    if (!isAdmin) return;
+    dbRef.update({ currentBgm: bgmFileName });
+}
+
+function triggerResetAll() {
+    if (!isAdmin) return;
+    dbRef.update({
+        speedMultiplier: 1,
+        players: {
+            1: { loggedIn: false, name: '', seconds: 30, isRunning: false },
+            2: { loggedIn: false, name: '', seconds: 60, isRunning: false },
+            3: { loggedIn: false, name: '', seconds: 30, isRunning: false }
         }
+    });
+}
 
-
-        // ==========================================
-        // 射擊遊戲邏輯 -> 上傳雲端排行榜
-        // ==========================================
-        const shootView = document.getElementById('shoot-game-view');
-        const shootScoreDisplay = document.getElementById('shoot-score');
-        const shootTimerDisplay = document.getElementById('shoot-timer');
-        const bottomGun = document.getElementById('bottom-gun');
-
-
-        const stressTexts = ["工作疲勞", "做家務", "催做功課", "儲錢買樓", "睡眠不足", "塞車遲到", "準備晚餐", "考試壓力"];
-        const happyTexts = ["放長假✈️", "加人工💰", "子女乖巧🥰", "吃大餐🍔", "中六合彩🎉", "睡到自然醒💤", "抽中禮物🎁", "連假開始🥳"];
-
-
-        let shootScore = 0; let shootTimeLeft = 20; let shootGameInterval = null; let shootSpawnInterval = null; let isShootPlaying = false; let lastAngleDegrees = 0;
-
-
-        shootView.addEventListener('mousemove', updateGunAngle);
-        shootView.addEventListener('touchmove', e => { if(e.touches.length > 0) updateGunAngle(e.touches[0]); });
-
-
-        function updateGunAngle(event) {
-            const rect = shootView.getBoundingClientRect();
-            const mouseX = event.clientX - rect.left; const mouseY = event.clientY - rect.top;
-            const gunStyles = window.getComputedStyle(bottomGun);
-            const gunRight = parseFloat(gunStyles.right) || 0; const gunBottom = parseFloat(gunStyles.bottom) || 0;
-            const gunX = shootView.clientWidth - gunRight - (bottomGun.offsetWidth / 2);
-            const gunY = shootView.clientHeight - gunBottom - (bottomGun.offsetHeight / 2);
-            const angleRadians = Math.atan2(mouseY - gunY, mouseX - gunX);
-            lastAngleDegrees = angleRadians * (180 / Math.PI);
-            bottomGun.style.transform = `rotate(${lastAngleDegrees - 180}deg)`;
-        }
-
-
-        shootView.addEventListener('mousedown', function(event) {
-            if (!isShootPlaying) return;
-            const rect = shootView.getBoundingClientRect();
-            createPenetratingBullet(event.clientX - rect.left, event.clientY - rect.top);
-        });
-
-
-        function createPenetratingBullet(targetX, targetY) {
-            const gunStyles = window.getComputedStyle(bottomGun);
-            const gunRight = parseFloat(gunStyles.right) || 0; const gunBottom = parseFloat(gunStyles.bottom) || 0;
-            let currentX = shootView.clientWidth - gunRight - (bottomGun.offsetWidth / 2);
-            let currentY = shootView.clientHeight - gunBottom - (bottomGun.offsetHeight / 2);
-
-
-            const bullet = document.createElement('div');
-            bullet.className = 'bullet'; bullet.innerText = '💛';
-            bullet.style.left = currentX + 'px'; bullet.style.top = currentY + 'px';
-            shootView.appendChild(bullet);
-
-
-            const dx = targetX - currentX; const dy = targetY - currentY; const distance = Math.sqrt(dx*dx + dy*dy);
-            const speed = 25; const velocityX = (dx / distance) * speed; const velocityY = (dy / distance) * speed;
-            let hitTargetsSet = new Set(); let isMiss = true;
-
-
-            function fly() {
-                if (!isShootPlaying) { bullet.remove(); return; }
-                currentX += velocityX; currentY += velocityY;
-                bullet.style.left = currentX + 'px'; bullet.style.top = currentY + 'px';
-
-
-                const targets = shootView.querySelectorAll('.target:not(.hit)');
-                targets.forEach(target => {
-                    if (hitTargetsSet.has(target)) return;
-                    const tx = parseFloat(target.style.left) + (target.offsetWidth / 2);
-                    const ty = parseFloat(target.style.top) + (target.offsetHeight / 2);
-                    const distToTarget = Math.sqrt((currentX - tx)**2 + (currentY - ty)**2);
-                    if (distToTarget <= (target.offsetWidth/2) + 10) {
-                        hitTargetsSet.add(target); isMiss = false; hitShootTarget(target);
-                    }
-                });
-
-
-                if (currentX < 0 || currentX > shootView.clientWidth || currentY < 0 || currentY > shootView.clientHeight) {
-                    bullet.remove();
-                    if (isMiss) {
-                        if (shootScore > 0) shootScore--; updateShootScoreDisplay();
-                        shootView.style.backgroundColor = '#fff5f5'; setTimeout(() => { shootView.style.backgroundColor = '#e3fafc'; }, 100);
-                        showFloatTextShoot(targetX, targetY, 'MISS!!!', '#f03e3e');
-                    }
-                    return;
-                }
-                requestAnimationFrame(fly);
-            }
-            requestAnimationFrame(fly);
-        }
-
-
-        function hitShootTarget(target) {
-            target.classList.add('hit');
-            if (target.classList.contains('target-happy')) { shootScore += 2; target.innerText = "❤️ +2分！"; }
-            else { shootScore += 0.5; target.innerText = "💥 +0.5分"; }
-            updateShootScoreDisplay();
-            setTimeout(() => { target.remove(); }, 180);
-        }
-        function updateShootScoreDisplay() { shootScoreDisplay.innerText = shootScore.toFixed(1).replace('.0', ''); }
-
-
-        function startShootGameLogic() {
-            const startScreen = document.createElement('div'); startScreen.className = 'end-screen';
-            startScreen.innerHTML = `
-                <div style="font-size: 22px; font-weight: bold; color: #0b7285; margin-bottom: 10px;">子彈具有【穿透效果】一石二鳥！</div>
-                <div style="font-size: 14px; color: #666; margin-bottom: 20px;">限時20秒，綠色+2分，紅色+0.5分，打空-1分</div>
-                <div class="btn-container">
-                    <button class="menu-btn btn-blue" onclick="realStartShoot()">開始射擊</button>
-                    <button class="menu-btn btn-gray" onclick="switchView('main-menu')">返回主頁</button>
-                </div>
-            `;
-            shootView.appendChild(startScreen);
-        }
-
-
-        function realStartShoot() {
-            const screen = shootView.querySelector('.end-screen'); if(screen) screen.remove();
-            isShootPlaying = true; shootScore = 0; shootTimeLeft = 20; updateShootScoreDisplay(); shootTimerDisplay.innerText = shootTimeLeft;
-            shootGameInterval = setInterval(() => { shootTimeLeft--; shootTimerDisplay.innerText = shootTimeLeft; if(shootTimeLeft <= 0) endShootGame(); }, 1000);
-            shootSpawnInterval = setInterval(spawnShootTarget, 800);
-        }
-
-
-        function spawnShootTarget() {
-            if(!isShootPlaying) return;
-            const target = document.createElement('div'); target.className = 'target';
-            if (Math.random() < 0.5) { target.classList.add('target-happy'); target.innerText = happyTexts[Math.floor(Math.random() * happyTexts.length)]; }
-            else { target.classList.add('target-stress'); target.innerText = stressTexts[Math.floor(Math.random() * stressTexts.length)]; }
-            shootView.appendChild(target);
-            const maxX = shootView.clientWidth - target.offsetWidth - 20; const maxY = shootView.clientHeight - target.offsetHeight - 50;
-            const rx = Math.max(20, Math.floor(Math.random() * maxX)); let ry = Math.max(20, Math.floor(Math.random() * maxY));
-            if (rx > shootView.clientWidth - 160 && ry > shootView.clientHeight - 160) ry -= 120;
-            target.style.left = rx + 'px'; target.style.top = ry + 'px';
-            setTimeout(() => { if (target.parentNode) target.remove(); }, 2000);
-        }
-
-
-        function stopShootGame() { isShootPlaying = false; clearInterval(shootGameInterval); clearInterval(shootSpawnInterval); }
-       
-        function endShootGame() {
-            stopShootGame(); document.querySelectorAll('.target, .bullet').forEach(el => el.remove());
-            setTimeout(() => {
-                let pName = currentUser ? currentUser.toUpperCase() : "PLAYER";
-                shootHighScores.push({ name: pName, score: parseFloat(shootScore.toFixed(1)) });
-                shootHighScores.sort((a, b) => b.score - a.score);
-                shootHighScores = shootHighScores.slice(0, 5);
-               
-                // 發布到 Firebase 雲端排行榜
-                database.ref('scores_shoot').set(shootHighScores);
-               
-                showShootResultMenu();
-            }, 100);
-        }
-
-
-        function showShootResultMenu() {
-            const endScreen = document.createElement('div'); endScreen.className = 'end-screen';
-            endScreen.innerHTML = `
-                <div style="font-size: 24px; font-weight: bold; color: #0b7285; margin-bottom: 10px;">💥 射擊戰果報告 💥</div>
-                <div style="font-size: 18px; margin-bottom: 15px;">您的最終得分：<span style="color:#f03e3e; font-weight:bold;">${shootScore.toFixed(1).replace('.0', '')}</span> 分！</div>
-                <div class="btn-container">
-                    <button class="menu-btn btn-blue" onclick="realStartShoot()">再玩一次</button>
-                    <button class="menu-btn btn-orange" onclick="showShootLeaderboard(this.parentNode.parentNode)">看英雄榜</button>
-                    <button class="menu-btn btn-gray" onclick="switchView('main-menu')">主選單</button>
-                </div>
-            `;
-            shootView.appendChild(endScreen);
-        }
-
-
-        function showShootLeaderboard(parentEl) {
-            let listHTML = ''; shootHighScores.forEach((item, index) => { listHTML += `<div class="leaderboard-item"><span class="rank-${index+1}">第 ${index+1} 名: ${item.name}</span><span>${item.score} 分</span></div>`; });
-            parentEl.innerHTML = `
-                <div style="font-size: 22px; font-weight: bold; color: #0b7285; margin-bottom: 10px;">🏆 射擊排行榜 🏆</div>
-                <div class="leaderboard-list">${listHTML}</div>
-                <div class="btn-container"><button class="menu-btn btn-blue" onclick="realStartShoot()">再玩一次</button><button class="menu-btn btn-gray" onclick="switchView('main-menu')">主選單</button></div>
-            `;
-        }
-        function showFloatTextShoot(x, y, text, color) {
-            const label = document.createElement('div'); label.innerText = text; label.style.position = 'absolute'; label.style.left = x + 'px'; label.style.top = y + 'px'; label.style.color = color; label.style.fontWeight = 'bold'; label.style.fontSize = '22px'; label.style.pointerEvents = 'none'; label.style.zIndex = '150'; label.style.animation = 'fadeOutUp 0.5s ease-out forwards'; shootView.appendChild(label); setTimeout(() => { label.remove(); }, 500);
-        }
-
-
-        // ==========================================
-        // 猜數字遊戲邏輯 -> 上傳雲端排行榜
-        // ==========================================
-        let guessSecretNumber = 0; let guessCount = 0;
-
-
-        function initGuessGame() {
-            switchView('guess-game-view'); guessSecretNumber = Math.floor(Math.random() * 100) + 1; guessCount = 0;
-            document.getElementById('guess-input').value = ''; document.getElementById('guess-count').innerText = '0';
-            document.getElementById('guess-hint').innerText = '請輸入數字開始...'; document.getElementById('guess-hint').style.color = '#e67e22';
-        }
-
-
-        function checkGuess() {
-            const inputEl = document.getElementById('guess-input'); const userGuess = parseInt(inputEl.value); const hintEl = document.getElementById('guess-hint');
-            if (isNaN(userGuess) || userGuess < 1 || userGuess > 100) { alert('請輸入 1 至 100 之間的數字！'); return; }
-            guessCount++; document.getElementById('guess-count').innerText = guessCount;
-
-
-            if (userGuess === guessSecretNumber) {
-                hintEl.innerText = `🎉 恭喜答對了！答案是 ${guessSecretNumber}！`; hintEl.style.color = '#51cf66';
-                setTimeout(() => {
-                    let pName = currentUser ? currentUser.toUpperCase() : "PLAYER";
-                    guessHighScores.push({ name: pName, score: guessCount });
-                    guessHighScores.sort((a, b) => a.score - b.score);
-                    guessHighScores = guessHighScores.slice(0, 5);
-                   
-                    // 發布到 Firebase 雲端排行榜
-                    database.ref('scores_guess').set(guessHighScores);
-                   
-                    showGuessResultScreen();
-                }, 500);
-            } else if (userGuess > guessSecretNumber) { hintEl.innerText = '📉 太大了！再試試小一點。'; hintEl.style.color = '#f03e3e'; }
-            else { hintEl.innerText = '📈 太小了！再試試大一點。'; hintEl.style.color = '#f59f00'; }
-            inputEl.value = ''; inputEl.focus();
-        }
-
-
-        function showGuessResultScreen() {
-            const endScreen = document.createElement('div'); endScreen.className = 'end-screen';
-            let listHTML = ''; guessHighScores.forEach((item, index) => { listHTML += `<div class="leaderboard-item"><span class="rank-${index+1}">第 ${index+1} 名: ${item.name}</span><span>${item.score} 次</span></div>`; });
-            endScreen.innerHTML = `
-                <div style="font-size: 24px; font-weight: bold; color: #7048e8; margin-bottom: 10px;">🏆 猜數字英雄榜 🏆</div>
-                <div style="font-size: 16px;">本次成績：<span style="color:#7048e8; font-weight:bold;">${guessCount}</span> 次</div>
-                <div class="leaderboard-list">${listHTML}</div>
-                <div class="btn-container"><button class="menu-btn btn-purple" onclick="initGuessGame()">再玩一次</button><button class="menu-btn btn-gray" onclick="switchView('main-menu')">主選單</button></div>
-            `;
-            document.getElementById('guess-game-view').appendChild(endScreen);
-        }
-
-
-        // 初始化狀態
-        checkLoginStatus();
-    </script>
-  <audio id="timer-bgm" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" loop></audio>
-</body>
-</html></pre>
-        </body>
-    </html>
+// 切換後台隱藏狀態 (可在瀏覽器主控台手動輸入)
+function toggleAdminMode() {
+    isAdmin = !isAdmin;
+    localStorage.setItem('game_isAdmin', isAdmin);
+    const adminPanel = document.getElementById('admin-panel');
+    if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
+    if (cloudState && cloudState.leaderboard) {
+        renderLeaderboardUI(cloudState.leaderboard, 'main');
+    }
+    return `目前 Admin 狀態變更為: ${isAdmin}`;
+}
