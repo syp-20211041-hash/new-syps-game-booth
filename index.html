@@ -366,21 +366,17 @@
         let guessTargetNum = 0;
         let guessCount = 0;
         let mindfulTextInterval = null;
-        let localIntervals = { 1: null, 2: null, 3: null };
 
         let secretClickCount = 0; 
-        let playerLogoutClickCount = 0; // 🌟 追蹤玩家點擊登出的次數
+        let playerLogoutClickCount = 0; 
 
         let shootHighScores = [];
         let guessHighScores = [];
-        let cloudState = {
-            speedMultiplier: 1,
-            globalParentCounter: 0,
-            players: {
-                1: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "第 1 位家長" },
-                2: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "第 2 位家長" },
-                3: { loggedIn: false, seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "第 3 位家長" }
-            }
+        
+        let playerLocalStates = {
+            1: { seconds: 30, isRunning: false },
+            2: { seconds: 30, isRunning: false },
+            3: { seconds: 30, isRunning: false }
         };
 
         const PARENT_WORDS = {
@@ -394,7 +390,7 @@
             }
         };
 
-        // 3. Firebase 監聽路徑
+        // 3. 排行榜與全域計數器單獨監聽
         database.ref('scores_shoot').on('value', function(snapshot) {
             shootHighScores = snapshot.val() || [];
             renderSeparateLeaderboards();
@@ -405,86 +401,76 @@
             renderSeparateLeaderboards();
         });
 
-        database.ref('massage_state').on('value', function(snapshot) {
-            const data = snapshot.val();
-            if (!data) return;
-            cloudState = data;
+        database.ref('massage_state/globalParentCounter').on('value', function(snapshot) {
+            const counterEl = document.getElementById('admin-global-counter');
+            if (counterEl) counterEl.innerText = snapshot.val() || 0;
+        });
 
-            if (data.globalParentCounter !== undefined) {
-                const counterEl = document.getElementById('admin-global-counter');
-                if (counterEl) counterEl.innerText = data.globalParentCounter;
-            }
+        // 直達路徑監聽玩家狀態
+        for (let i = 1; i <= 3; i++) {
+            database.ref('massage_state/players/' + i).on('value', function(snapshot) {
+                const pData = snapshot.val() || { seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "家長" };
+                
+                playerLocalStates[i].seconds = pData.seconds !== undefined ? pData.seconds : 30;
+                playerLocalStates[i].isRunning = !!pData.isRunning;
 
-            if (data.players) {
-                if (data.players[1]) updateClockDisplay('admin-p1-clock', data.players[1].seconds);
-                if (data.players[2]) updateClockDisplay('admin-p2-clock', data.players[2].seconds);
-                if (data.players[3]) updateClockDisplay('admin-p3-clock', data.players[3].seconds);
-            }
+                // 🌟 修正：修正了 admin-p2-clock 的引號錯誤，確保時間能更新不報錯！
+                updateClockDisplay('admin-p1-clock', playerLocalStates[1].seconds);
+                updateClockDisplay('admin-p2-clock', playerLocalStates[2].seconds);
+                updateClockDisplay('admin-p3-clock', playerLocalStates[3].seconds);
 
-            if (currentUser && currentUser !== 'admin') {
-                let pNum = currentUser.replace('PLAYER', '');
-                if (data.players && data.players[pNum]) {
-                    let pData = data.players[pNum];
-                    updateClockDisplay('lbl-player-clock', pData.seconds);
-                    
-                    if (pData.displayName) {
-                        document.getElementById('lbl-player-name').innerText = pData.displayName;
-                    }
-
-                    if (pData.needsSeat) {
-                        document.getElementById('ready-overlay').style.display = 'flex';
-                    }
-                    
-                    document.body.className = pData.effect ? `troll-${pData.effect}` : '';
+                // 如果目前是對應的玩家畫面
+                if (currentUser === 'PLAYER' + i) {
+                    updateClockDisplay('lbl-player-clock', playerLocalStates[i].seconds);
+                    if (pData.displayName) document.getElementById('lbl-player-name').innerText = pData.displayName;
+                    document.getElementById('ready-overlay').style.display = pData.needsSeat ? 'flex' : 'none';
+                    document.body.className = pData.effect ? 'troll-' + pData.effect : '';
                     
                     const alertBox = document.getElementById('player-broadcast-alert');
                     if (pData.msg && pData.msg.trim() !== "") {
-                        alertBox.innerText = "📢 通知：" + pData.msg;
-                        alertBox.style.display = 'block';
+                        alertBox.innerText = "📢 通知：" + pData.msg; alertBox.style.display = 'block';
                     } else {
                         alertBox.style.display = 'none';
                     }
 
                     const bgmAudio = document.getElementById('timer-bgm');
-                    if (pData.isRunning) {
+                    if (playerLocalStates[i].isRunning) {
                         if (bgmAudio && bgmAudio.paused) bgmAudio.play().catch(e => console.log("Audio unlock"));
                     } else {
                         if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
                     }
                 }
-            }
+            });
+        }
+
+        // 唯有管理員端會執行計時扣秒
+        setInterval(function() {
+            if (!isAdmin) return;
 
             for (let i = 1; i <= 3; i++) {
-                if (!data.players || !data.players[i]) continue;
-                const pData = data.players[i];
-
-                if (pData.isRunning) {
-                    if (!localIntervals[i]) {
-                        localIntervals[i] = setInterval(function() {
-                            let sec = pData.seconds;
-                            sec -= (1 * (cloudState.speedMultiplier || 1));
-                            if (sec <= 0) {
-                                sec = 0;
-                                clearInterval(localIntervals[i]);
-                                localIntervals[i] = null;
-                                if (isAdmin) database.ref(`massage_state/players/${i}`).update({ seconds: 0, isRunning: false });
-                            } else {
-                                if (isAdmin) database.ref(`massage_state/players/${i}`).update({ seconds: sec });
+                if (playerLocalStates[i].isRunning && playerLocalStates[i].seconds > 0) {
+                    const targetRef = database.ref('massage_state/players/' + i);
+                    targetRef.transaction(function(currentData) {
+                        if (!currentData) return currentData;
+                        if (currentData.isRunning) {
+                            currentData.seconds = (currentData.seconds || 1) - 1;
+                            if (currentData.seconds <= 0) {
+                                currentData.seconds = 0;
+                                currentData.isRunning = false;
                             }
-                        }, 1000);
-                    }
-                } else {
-                    if (localIntervals[i]) { clearInterval(localIntervals[i]); localIntervals[i] = null; }
+                        }
+                        return currentData;
+                    });
                 }
             }
-        });
+        }, 1000);
 
         function updateClockDisplay(elementId, totalSeconds) {
             const el = document.getElementById(elementId);
             if (!el) return;
             const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
             const secs = String(totalSeconds % 60).padStart(2, '0');
-            el.innerText = `${mins}:${secs}`;
+            el.innerText = mins + ':' + secs;
         }
 
         // 4. 登入與登出系統
@@ -496,9 +482,9 @@
                 isAdmin = true; currentUser = 'admin';
             } else if ((user === 'player1' || user === 'player2' || user === 'player3') && pass === '123') {
                 isAdmin = false; currentUser = user.toUpperCase();
-                playerLogoutClickCount = 0; // 重設登出計數器
+                playerLogoutClickCount = 0; 
                 let num = user.replace('player', '');
-                database.ref(`massage_state/players/${num}`).update({ loggedIn: true });
+                database.ref('massage_state/players/' + num).update({ loggedIn: true });
             } else {
                 alert('帳號或密碼錯誤！'); return;
             }
@@ -508,21 +494,17 @@
             switchView('main-menu');
         }
 
-        // 🌟 核心修改：玩家點擊登出按鈕 5 次強制本地安全登出機制
         function handleLogout() {
-            // 如果目前是 admin 在後台，點一下直接登出
             if (currentUser === 'admin') {
                 performLogoutLogic();
                 return;
             }
 
-            // 如果是 player1, 2, 3，必須連點 5 次
             if (currentUser && currentUser.startsWith('PLAYER')) {
                 playerLogoutClickCount++;
-                // 前面 1~4 次不作任何警告、也不秀任何東西 (完全安靜)
                 if (playerLogoutClickCount >= 5) {
                     playerLogoutClickCount = 0;
-                    performLogoutLogic(); // 點滿第 5 次，直接踢回登入畫面
+                    performLogoutLogic(); 
                 }
             }
         }
@@ -530,7 +512,7 @@
         function performLogoutLogic() {
             if (currentUser && currentUser.startsWith('PLAYER')) {
                 let num = currentUser.replace('PLAYER', '');
-                database.ref(`massage_state/players/${num}`).update({ loggedIn: false });
+                database.ref('massage_state/players/' + num).update({ loggedIn: false });
             }
             localStorage.removeItem('game_currentUser');
             localStorage.removeItem('game_isAdmin');
@@ -569,13 +551,13 @@
             if (shootUl) {
                 shootUl.innerHTML = '';
                 if (!shootHighScores || shootHighScores.length === 0) {
-                    shootUl.innerHTML = `<li>暫無數據</li>`;
+                    shootUl.innerHTML = '<li>暫無數據</li>';
                 } else {
                     shootHighScores.slice(0, 5).forEach((item, index) => {
-                        let displayName = item.name || `使用者(${index + 1})`;
+                        let displayName = item.name || ('使用者(' + (index + 1) + ')');
                         let li = document.createElement('li');
-                        let del = isAdmin ? `<button onclick="deleteScoreItem('shoot', ${index})" style="color:red;background:none;border:none;cursor:pointer;">❌</button>` : '';
-                        li.innerHTML = `<span>No.${index+1} ${displayName} - ${item.score}分</span>${del}`;
+                        let del = isAdmin ? '<button onclick="deleteScoreItem(\'shoot\', ' + index + ')" style="color:red;background:none;border:none;cursor:pointer;">❌</button>' : '';
+                        li.innerHTML = '<span>No.' + (index+1) + ' ' + displayName + ' - ' + item.score + '分</span>' + del;
                         shootUl.appendChild(li);
                     });
                 }
@@ -584,13 +566,13 @@
             if (guessUl) {
                 guessUl.innerHTML = '';
                 if (!guessHighScores || guessHighScores.length === 0) {
-                    guessUl.innerHTML = `<li>暫無數據</li>`;
+                    guessUl.innerHTML = '<li>暫無數據</li>';
                 } else {
                     guessHighScores.slice(0, 5).forEach((item, index) => {
-                        let displayName = item.name || `使用者(${index + 1})`;
+                        let displayName = item.name || ('使用者(' + (index + 1) + ')');
                         let li = document.createElement('li');
-                        let del = isAdmin ? `<button onclick="deleteScoreItem('guess', ${index})" style="color:red;background:none;border:none;cursor:pointer;">❌</button>` : '';
-                        li.innerHTML = `<span>No.${index+1} ${displayName} - ${item.score}次</span>${del}`;
+                        let del = isAdmin ? '<button onclick="deleteScoreItem(\'guess\', ' + index + ')" style="color:red;background:none;border:none;cursor:pointer;">❌</button>' : '';
+                        li.innerHTML = '<span>No.' + (index+1) + ' ' + displayName + ' - ' + item.score + '次</span>' + del;
                         guessUl.appendChild(li);
                     });
                 }
@@ -611,7 +593,7 @@
         function uploadScoreToGameLeaderboard(gameType, name, score) {
             if (currentUser && currentUser !== 'admin') {
                 let pNum = currentUser.replace('PLAYER', '');
-                database.ref(`massage_state/players/${pNum}/displayName`).once('value', function(snap) {
+                database.ref('massage_state/players/' + pNum + '/displayName').once('value', function(snap) {
                     let finalName = snap.val() || name;
                     saveToCloud(finalName);
                 });
@@ -639,7 +621,7 @@
             }
         }
 
-        // 遊戲模組與場景切換
+        // 遊戲功能
         function switchView(viewId) {
             clearInterval(shootTimerInterval); clearInterval(mindfulTextInterval);
             document.querySelectorAll('.target').forEach(t => t.remove());
@@ -670,7 +652,7 @@
                 timeLeft--; document.getElementById('shoot-timer').innerText = timeLeft;
                 if (timeLeft <= 0) {
                     clearInterval(shootTimerInterval);
-                    alert(`遊戲結束！得分：${shootScore}`);
+                    alert('遊戲結束！得分：' + shootScore);
                     if (currentUser) uploadScoreToGameLeaderboard('shoot', currentUser, shootScore);
                     switchView('main-menu');
                 }
@@ -688,9 +670,9 @@
             let text = textList[Math.floor(Math.random() * textList.length)];
             
             if (currentLang === 'zh') {
-                t.innerHTML = isStress ? `<span>🔴 壓力心煩</span><strong>${text}</strong>` : `<span>🟢 放鬆療癒</span><strong>${text}</strong>`;
+                t.innerHTML = isStress ? '<span>🔴 壓力心煩</span><strong>' + text + '</strong>' : '<span>🟢 放鬆療癒</span><strong>' + text + '</strong>';
             } else {
-                t.innerHTML = isStress ? `<span>🔴 Stress</span><strong>${text}</strong>` : `<span>🟢 Relief</span><strong>${text}</strong>`;
+                t.innerHTML = isStress ? '<span>🔴 Stress</span><strong>' + text + '</strong>' : '<span>🟢 Relief</span><strong>' + text + '</strong>';
             }
 
             const container = document.getElementById('main-container');
@@ -740,22 +722,23 @@
             document.getElementById('mode-hand').classList.toggle('active', mode === '手');
         }
 
+        // 啟動與倒數計時
         function startMassageTimer() {
             if (!isAdmin) return;
             let pid = document.getElementById('admin-target-select').value;
-            database.ref(`massage_state/players/${pid}`).update({ isRunning: true });
+            database.ref('massage_state/players/' + pid).update({ isRunning: true });
         }
 
         function resetMassageTimer() {
             if (!isAdmin) return;
             let pid = document.getElementById('admin-target-select').value;
-            database.ref(`massage_state/players/${pid}`).update({ seconds: 30, isRunning: false, msg: "", effect: "" });
+            database.ref('massage_state/players/' + pid).update({ seconds: 30, isRunning: false, msg: "", effect: "" });
         }
 
         function setTimeByWheel(sec) {
             if (!isAdmin) return;
             let pid = document.getElementById('admin-target-select').value;
-            database.ref(`massage_state/players/${pid}`).update({ seconds: sec });
+            database.ref('massage_state/players/' + pid).update({ seconds: sec });
         }
 
         function changeLanguage(lang) {
@@ -779,37 +762,26 @@
 
             database.ref('massage_state/globalParentCounter').once('value', function(snapshot) {
                 let currentCount = snapshot.val() || 0;
-                let inputName = prompt("✨ 歡迎就座體驗！\n\n您可以輸入您的暱稱，或直接點選確認/不填來跳過。");
-                let finalDisplayName = "";
+                currentCount += 1;
+                let finalDisplayName = "第 " + currentCount + " 位家長";
                 
-                if (inputName !== null && inputName.trim() !== "") {
-                    finalDisplayName = inputName.trim();
-                    proceed(finalDisplayName, currentCount);
-                } else {
-                    currentCount += 1;
-                    finalDisplayName = "第 " + currentCount + " 位家長";
-                    database.ref('massage_state').update({ globalParentCounter: currentCount }, function() {
-                        proceed(finalDisplayName, currentCount);
-                    });
-                }
+                database.ref('massage_state').update({ globalParentCounter: currentCount }, function() {
+                    const bgm = document.getElementById('timer-bgm');
+                    if (bgm) { bgm.play().then(() => { bgm.pause(); bgm.currentTime = 0; }).catch(e => console.log(e)); }
+                    document.getElementById('ready-overlay').style.display = 'none';
+                    
+                    if (currentUser && currentUser !== 'admin') {
+                        database.ref('massage_state/players/' + pNum).update({ 
+                            needsSeat: false, 
+                            seconds: 30, 
+                            isRunning: false, 
+                            effect: "", 
+                            msg: "",
+                            displayName: finalDisplayName
+                        });
+                    }
+                });
             });
-
-            function proceed(nameToSet, countVal) {
-                const bgm = document.getElementById('timer-bgm');
-                if (bgm) { bgm.play().then(() => { bgm.pause(); bgm.currentTime = 0; }).catch(e => console.log(e)); }
-                document.getElementById('ready-overlay').style.display = 'none';
-                
-                if (currentUser && currentUser !== 'admin') {
-                    database.ref(`massage_state/players/${pNum}`).update({ 
-                        needsSeat: false, 
-                        seconds: 30, 
-                        isRunning: false, 
-                        effect: "", 
-                        msg: "",
-                        displayName: nameToSet
-                    });
-                }
-            }
         }
 
         // 🔒 標題隱藏密鑰觸發機制
@@ -834,7 +806,6 @@
             }
         }
 
-        // 🌟 移除說明中的舊指令
         function showAllCommandsHelp() {
             alert(
                 "=== 💻 密令後台完整指令清單 ===\n\n" +
@@ -857,7 +828,7 @@
             );
         }
 
-        // 后台指令核心處理常式（已移除 logout player []）
+        // 後台指令處理
         function submitAdminCmd() {
             if (!isAdmin) return;
             const input = document.getElementById('cmds-input');
@@ -887,9 +858,9 @@
                 if (parts.length >= 2) {
                     const target = parts[1].toLowerCase();
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref(`massage_state/players/${i}`).update({ needsSeat: true, isRunning: false });
+                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ needsSeat: true, isRunning: false });
                     } else if (['1', '2', '3'].includes(target)) {
-                        database.ref(`massage_state/players/${target}`).update({ needsSeat: true, isRunning: false });
+                        database.ref('massage_state/players/' + target).update({ needsSeat: true, isRunning: false });
                     } else { alert("找不到該玩家！"); }
                 }
                 return;
@@ -903,9 +874,9 @@
                     if (isNaN(seconds)) { alert("請輸入正確的時間秒數！"); return; }
 
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref(`massage_state/players/${i}`).update({ seconds: seconds });
+                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ seconds: seconds });
                     } else if (['1', '2', '3'].includes(target)) {
-                        database.ref(`massage_state/players/${target}`).update({ seconds: seconds });
+                        database.ref('massage_state/players/' + target).update({ seconds: seconds });
                     } else { alert("找不到該玩家！"); }
                 }
                 return;
@@ -918,9 +889,9 @@
                     const messageText = parts.slice(2).join(' ');
 
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref(`massage_state/players/${i}`).update({ msg: messageText });
+                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ msg: messageText });
                     } else if (['1', '2', '3'].includes(target)) {
-                        database.ref(`massage_state/players/${target}`).update({ msg: messageText });
+                        database.ref('massage_state/players/' + target).update({ msg: messageText });
                     } else { alert("找不到該玩家！"); }
                 }
                 return;
@@ -933,9 +904,9 @@
                     const trollType = parts[2].toLowerCase();
 
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref(`massage_state/players/${i}`).update({ effect: trollType });
+                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ effect: trollType });
                     } else if (['1', '2', '3'].includes(target)) {
-                        database.ref(`massage_state/players/${target}`).update({ effect: trollType });
+                        database.ref('massage_state/players/' + target).update({ effect: trollType });
                     } else { alert("找不到該玩家！"); }
                 }
                 return;
@@ -946,9 +917,9 @@
                 if (parts.length >= 2) {
                     const target = parts[1].toLowerCase();
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref(`massage_state/players/${i}`).update({ effect: "", msg: "" });
+                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ effect: "", msg: "" });
                     } else if (['1', '2', '3'].includes(target)) {
-                        database.ref(`massage_state/players/${target}`).update({ effect: "", msg: "" });
+                        database.ref('massage_state/players/' + target).update({ effect: "", msg: "" });
                     } else { alert("找不到該玩家！"); }
                 }
                 return;
@@ -957,7 +928,7 @@
             if (rawCmd.toLowerCase().startsWith('begin player ')) {
                 const num = rawCmd.toLowerCase().replace('begin player ', '').trim();
                 if (['1', '2', '3'].includes(num)) {
-                    database.ref(`massage_state/players/${num}`).update({ loggedIn: true, needsSeat: false });
+                    database.ref('massage_state/players/' + num).update({ loggedIn: true, needsSeat: false });
                     
                     localStorage.setItem('game_currentUser', 'PLAYER' + num);
                     localStorage.setItem('game_isAdmin', 'false');
