@@ -822,25 +822,34 @@
                 "• .troll [1/2/3/all] reverse  -> 遊戲畫面直接上下顛倒 180 度\n" +
                 "• .troll [1/2/3/all] flash    -> 蹦迪霓虹燈閃爍效果\n" +
                 "• .clear [1/2/3/all]          -> 清除所有惡搞狀態，恢復原狀\n\n" +
+                "【🔥 新增神祕瘋狂密令】\n" +
+                "• .freeze [1/2/3/all]      -> 鎖定玩家畫面，顯示壓力過載按了沒反應\n" +
+                "• .rickroll [1/2/3/all]    -> 強制改名 Rick Astley 並開啟神曲歌詞迷因\n" +
+                "• .jackpot [1/2/3/all]     -> 直接灌入 9990 分，神不知鬼不覺霸榜\n" +
+                "• .boom [1/2/3/all]        -> 時間瞬間剩 3 秒並跳出毀滅性自毀警告\n\n" +
                 "【🔑 權限切換類】\n" +
                 "• begin player [1/2/3]\n" +
                 "• logout admin"
             );
         }
 
-        // 後台指令處理
+// ======= 💻 黑客帝國超級指令後台核心系統 =======
+        // 警告：以下代碼包含高濃度的惡搞因子與未知的魔法。
+        // 如果執行時 iPad 突然開始跳舞，那是正常現象，請保持冷靜。
         function submitAdminCmd() {
-            if (!isAdmin) return;
+            if (!isAdmin) return; // 物理阻止非管理員的偷看行為
             const input = document.getElementById('cmds-input');
             const rawCmd = input.value.trim();
             input.value = '';
 
+            // 登出後台：假裝一切都沒發生過，溜了溜了
             if (rawCmd.toLowerCase() === 'logout admin') {
                 performLogoutLogic();
                 alert("管理員已成功登出。");
                 return;
             }
 
+            // 修改全局計數器：隨意操縱家長流水號的上帝之手
             if (rawCmd.startsWith('.setcount ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 2) {
@@ -853,6 +862,7 @@
                 return;
             }
 
+            // 踢人就座：強制把家長趕回「確認就座」畫面
             if (rawCmd.startsWith('.next ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 2) {
@@ -866,6 +876,7 @@
                 return;
             }
 
+            // 操控時間：掌控時間維度的神祕代碼
             if (rawCmd.startsWith('.set ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
@@ -882,6 +893,7 @@
                 return;
             }
 
+            // 廣播跑馬燈：在玩家畫面上塞滿垃圾訊息的絕佳管道
             if (rawCmd.startsWith('.w ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
@@ -897,6 +909,7 @@
                 return;
             }
 
+            // 視覺惡搞：顛倒、震動、蹦迪全靠它
             if (rawCmd.startsWith('.troll ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
@@ -912,6 +925,7 @@
                 return;
             }
 
+            // 一鍵還原：惡搞完之後假裝若無其事的終極防護罩
             if (rawCmd.startsWith('.clear ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 2) {
@@ -925,6 +939,71 @@
                 return;
             }
 
+            // ======= 🌟 【核心惡搞密令升級區】 🌟 =======
+            
+            // .freeze 密令：讓家長體會一下什麼叫「點到螢幕快破了都沒反應」的定身術
+            if (rawCmd.startsWith('.freeze ')) {
+                const parts = rawCmd.split(' ');
+                if (parts.length >= 2) {
+                    const target = parts[1].toLowerCase();
+                    const msgText = "⚠️ 系統偵測到壓力過載，功能暫時鎖定！請勿拍打餵食螢幕！";
+                    if (target === 'all') {
+                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ effect: "matrix", msg: msgText });
+                    } else if (['1', '2', '3'].includes(target)) {
+                        database.ref('massage_state/players/' + target).update({ effect: "matrix", msg: msgText });
+                    } else { alert("找不到該玩家！"); }
+                }
+                return;
+            }
+
+            // .rickroll 密令：網路上最偉大的迷因突襲，讓家長的名字變成 Rick Astley
+            if (rawCmd.startsWith('.rickroll ')) {
+                const parts = rawCmd.split(' ');
+                if (parts.length >= 2) {
+                    const target = parts[1].toLowerCase();
+                    const trollMsg = "🎵 Never gonna give you up, never gonna let you down~ 🎵";
+                    if (target === 'all') {
+                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ msg: trollMsg, displayName: "Rick Astley" });
+                    } else if (['1', '2', '3'].includes(target)) {
+                        database.ref('massage_state/players/' + target).update({ msg: trollMsg, displayName: "Rick Astley" });
+                    } else { alert("找不到該玩家！"); }
+                }
+                return;
+            }
+
+            // .jackpot 密令：一鍵修改分數，強行灌入 9990 分直接霸榜，內定冠軍專用
+            if (rawCmd.startsWith('.jackpot ')) {
+                const parts = rawCmd.split(' ');
+                if (parts.length >= 2) {
+                    const target = parts[1].toLowerCase();
+                    if (target === 'all') {
+                        for(let i=1;i<=3;i++) uploadScoreToGameLeaderboard('shoot', 'PLAYER'+i, 9990);
+                    } else if (['1', '2', '3'].includes(target)) {
+                        uploadScoreToGameLeaderboard('shoot', 'PLAYER'+target, 9990);
+                    } else { alert("找不到該玩家！"); }
+                    alert("💥 刷榜成功！已強行在排行榜寫入 9990 分！");
+                }
+                return;
+            }
+
+            // .boom 密令：給磨磨蹭蹭的家長一點小小的時間震撼，強制殘血倒數 3 秒！
+            if (rawCmd.startsWith('.boom ')) {
+                const parts = rawCmd.split(' ');
+                if (parts.length >= 2) {
+                    const target = parts[1].toLowerCase();
+                    const panicMsg = "🚨 警告：按摩椅偵測到不可抗力因素，即將啟動自毀引爆倒數！！";
+                    if (target === 'all') {
+                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ seconds: 3, msg: panicMsg });
+                    } else if (['1', '2', '3'].includes(target)) {
+                        database.ref('massage_state/players/' + target).update({ seconds: 3, msg: panicMsg });
+                    } else { alert("找不到該玩家！"); }
+                }
+                return;
+            }
+            
+            // ======= 🌟 【新密令結束】 🌟 =======
+
+            // 快速通道：強制登入成玩家的傳送門
             if (rawCmd.toLowerCase().startsWith('begin player ')) {
                 const num = rawCmd.toLowerCase().replace('begin player ', '').trim();
                 if (['1', '2', '3'].includes(num)) {
@@ -938,7 +1017,8 @@
                 return;
             } 
 
-            alert("未知密令。可以點擊上面的 See all cmds 按鈕查看哦！");
+            // 終極嘲諷：如果你打錯字，這行代碼會對你翻白眼
+            alert("未知密令。別亂猜，可以點擊上面的 See all cmds 按鈕查看喔！");
         }
 
         setupInterfaceBasedOnRole();
