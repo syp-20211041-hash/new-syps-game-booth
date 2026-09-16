@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>5A班第2組 - 家長舒壓娛樂中心</title>
+    <title>6A班第2組 - 家長舒壓娛樂中心</title>
    
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -15,7 +15,11 @@
             background-color: #f0f2f5; color: #333;
             font-family: 'Microsoft JhengHei', Arial, sans-serif;
             display: flex; flex-direction: column; align-items: center;
-            min-height: 100vh; overflow-x: hidden; user-select: none;
+            min-height: 100vh; overflow-x: hidden;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
             transition: all 0.3s ease;
         }
 
@@ -645,7 +649,8 @@
         });
 
         function startShootGame() {
-            shootScore = 0; document.getElementById('shoot-score').innerText = "0";
+            clearInterval(shootTimerInterval); // ✨ 手動補上這一行！
+	    shootScore = 0; document.getElementById('shoot-score').innerText = "0";
             let timeLeft = 20; document.getElementById('shoot-timer').innerText = timeLeft;
             for(let i=0; i<5; i++) { spawnSingleTarget(); }
             shootTimerInterval = setInterval(function() {
@@ -692,7 +697,7 @@
         function checkGuess() {
             const inputEl = document.getElementById('guess-input');
             const val = parseInt(inputEl.value);
-            if (!val || val < 1 || val > 100) { alert('請輸入1-100！'); return; }
+            if (isNaN(val) || val < 1 || val > 100) { alert('請輸入 1 至 100 之間的有效數字！'); return; }
 
             guessCount++; document.getElementById('guess-count').innerText = guessCount;
             const hintEl = document.getElementById('guess-hint');
