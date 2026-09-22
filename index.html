@@ -600,12 +600,16 @@
 
             if (guessUl) {
                 guessUl.innerHTML = '';
-                if (!guessHighScores || guessHighScores.length === 0) guessUl.innerHTML = '<li>暫無數據</li>';
-                else {
-                    guessHighScores.slice(0, 5).forEach((item, index) => {
+                if (!guessHighScores || guessHighScores.length === 0) {
+                    guessUl.innerHTML = '<li>暫無數據</li>';
+                } else {
+                    // 🟢 關鍵：強制由高分排到低分 (b - a)
+                    let sortedGuess = [...guessHighScores].sort((a, b) => b.score - a.score);
+
+                    sortedGuess.slice(0, 5).forEach((item, index) => {
                         let displayName = item.name || ('使用者(' + (index + 1) + ')');
                         let li = document.createElement('li');
-                        let del = isAdmin ? `<button onclick="deleteScoreItem('guess', ${index})" style="color:red;background:none;border:none;cursor:pointer;">❌</button>` : '';
+                        let del = isAdmin ? `<button onclick="deleteScoreItem('guess', ${guessHighScores.indexOf(item)})" style="color:red;background:none;border:none;cursor:pointer;">❌</button>` : '';
                         li.innerHTML = `<span>No.${index+1} ${displayName} - ${item.score}分</span>${del}`;
                         guessUl.appendChild(li);
                     });
