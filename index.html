@@ -7,6 +7,8 @@
    
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <!-- 引入 Canvas Confetti 實現破紀錄紙屑特效 -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
     <style>
         * { box-sizing: border-box; }
@@ -16,42 +18,31 @@
             font-family: 'Microsoft JhengHei', Arial, sans-serif;
             display: flex; flex-direction: column; align-items: center;
             min-height: 100vh; overflow-x: hidden;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
+            -webkit-user-select: none; user-select: none;
             transition: all 0.3s ease;
         }
+
+        /* 頂部總統計看板 */
+        #global-stats-banner {
+            width: 100%; max-width: 850px;
+            background: linear-gradient(90deg, #ff8a00, #e52e71);
+            color: white; font-weight: bold; font-size: 18px;
+            text-align: center; padding: 10px; border-radius: 12px;
+            margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            animation: pulseBanner 2s infinite;
+        }
+        @keyframes pulseBanner { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.01); } }
 
         /* 惡搞效果 CSS 樣式 */
         body.troll-matrix { background-color: #000000 !important; color: #00ff00 !important; font-family: monospace !important; }
         body.troll-matrix #main-container, body.troll-matrix #player-status-board { background: #050505 !important; border-color: #00ff00 !important; color: #00ff00 !important; }
         body.troll-matrix .menu-btn, body.troll-matrix .target { background: #003300 !important; border: 2px solid #00ff00 !important; color: #00ff00 !important; }
-        
         body.troll-reverse #main-container { transform: rotate(180deg); }
-        
         body.troll-shake #main-container { animation: screenShake 0.1s infinite; }
         @keyframes screenShake {
-            0% { transform: translate(2px, 1px) rotate(0deg); }
-            10% { transform: translate(-1px, -2px) rotate(-1deg); }
-            20% { transform: translate(-3px, 0px) rotate(1deg); }
-            30% { transform: translate(0px, 2px) rotate(0deg); }
-            40% { transform: translate(1px, -1px) rotate(1deg); }
-            50% { transform: translate(-1px, 2px) rotate(-1deg); }
-            60% { transform: translate(-3px, 1px) rotate(0deg); }
-            70% { transform: translate(2px, 1px) rotate(-1deg); }
-            80% { transform: translate(-1px, -1px) rotate(1deg); }
-            90% { transform: translate(2px, 2px) rotate(0deg); }
-            100% { transform: translate(1px, -2px) rotate(-1deg); }
-        }
-
-        body.troll-flash { animation: discoFlash 0.3s infinite; }
-        @keyframes discoFlash {
-            0% { background-color: #ff00ff; }
-            25% { background-color: #00ffff; }
-            50% { background-color: #ffff00; }
-            75% { background-color: #ff0000; }
-            100% { background-color: #00ff00; }
+            0% { transform: translate(2px, 1px); } 20% { transform: translate(-3px, 0px); }
+            40% { transform: translate(1px, -1px); } 60% { transform: translate(-3px, 1px); }
+            80% { transform: translate(-1px, -1px); } 100% { transform: translate(1px, -2px); }
         }
 
         /* 頂部管理員控制面板 */
@@ -66,17 +57,25 @@
         }
 
         .admin-players-status {
-            display: flex; flex-direction: column; gap: 4px; background: rgba(255,255,255,0.5);
-            padding: 6px 10px; border-radius: 8px; border: 1px solid #b2f2bb; min-width: 180px; max-height: 120px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 4px; background: rgba(255,255,255,0.6);
+            padding: 6px 10px; border-radius: 8px; border: 1px solid #b2f2bb; min-width: 220px; max-height: 140px; overflow-y: auto;
         }
-        .admin-p-row { display: flex; justify-content: space-between; gap: 15px; font-family: monospace; font-size: 13px; }
+        .admin-p-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-family: monospace; font-size: 13px; }
+        
+        /* 狀態燈號 */
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .dot-running { background-color: #10b981; box-shadow: 0 0 6px #10b981; } /* 🟢 體驗中 */
+        .dot-waiting { background-color: #f59e0b; } /* 🟡 等候中 */
+        .dot-ended { background-color: #ef4444; }   /* 🔴 已結束 */
 
-        .admin-center-controls { display: flex; align-items: center; gap: 8px; }
+        .admin-center-controls { display: flex; flex-direction: column; gap: 6px; }
+        .admin-ctrl-row { display: flex; gap: 6px; align-items: center; }
         .admin-center-controls select { background-color: #06b6d4; color: white; border: none; padding: 6px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .admin-btn { background-color: #0d9488; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .admin-btn:hover { background-color: #115e59; }
         .btn-reset { background-color: #ea580c; }
-        .btn-reset:hover { background-color: #c2410c; }
+        .btn-all-start { background-color: #16a34a; }
+        .btn-all-reset { background-color: #dc2626; }
 
         .admin-right-wheel { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
         .mode-toggle-zone { display: flex; gap: 4px; align-items: center; }
@@ -85,7 +84,6 @@
         
         .wheel-buttons { display: flex; gap: 4px; }
         .record-btn { background-color: #d946ef; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer; font-weight: bold; }
-        .record-btn:hover { background-color: #c026d3; }
 
         /* 玩家狀態看板 */
         #player-status-board {
@@ -101,12 +99,6 @@
             width: 100%; background-color: #fff3bf; border: 1px solid #fab005;
             color: #d9480f; padding: 6px 12px; border-radius: 8px;
             font-size: 14px; text-align: center; display: none;
-            animation: pulseBg 2s infinite;
-        }
-        @keyframes pulseBg {
-            0% { background-color: #fff3bf; }
-            50% { background-color: #ffec99; }
-            100% { background-color: #fff3bf; }
         }
 
         h1 { color: #4a4a4a; margin: 5px 0 15px 0; font-size: 26px; text-align: center; cursor: pointer; }
@@ -144,19 +136,20 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.1s;
         }
         .menu-btn:active { transform: scale(0.95); }
-        .btn-blue { background-color: #22b8cf; } .btn-blue:hover { background-color: #15aabf; }
-        .btn-purple { background-color: #845ef7; } .btn-purple:hover { background-color: #7048e8; }
-        .btn-green { background-color: #0ca678; } .btn-green:hover { background-color: #099268; }
-        .btn-gray { background-color: #868e96; } .btn-gray:hover { background-color: #495057; }
+        .btn-blue { background-color: #22b8cf; } .btn-purple { background-color: #845ef7; }
+        .btn-green { background-color: #0ca678; } .btn-gray { background-color: #868e96; }
 
         #shoot-game-view {
             background-color: #e3fafc; padding: 0;
             cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' style='font-size:24px'><text y='24'>🎯</text></svg>") 16 16, pointer;
         }
         #shoot-ui {
-            position: absolute; top: 10px; width: 90%; background: rgba(255,255,255,0.9);
-            padding: 5px 15px; border-radius: 20px; font-weight: bold; text-align: center; z-index: 60;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-size: 16px;
+            position: absolute; top: 10px; width: 90%; background: rgba(255,255,255,0.95);
+            padding: 6px 15px; border-radius: 20px; font-weight: bold; text-align: center; z-index: 60;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-size: 16px; display: flex; justify-content: space-around;
+        }
+        #combo-badge {
+            color: #d946ef; font-weight: 900; display: none; animation: pop 0.3s infinite alternate;
         }
 
         .target {
@@ -194,16 +187,9 @@
         .board-column h4 { margin: 4px 0; font-size: 14px; color: #1e293b; text-align: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 4px; }
         .leaderboard-list { width: 100%; padding: 0; margin: 0; list-style: none; min-height: 80px; }
         .leaderboard-list li { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: bold; }
-        .leaderboard-list li:last-child { border-bottom: none; }
 
         #admin-cmds-wrapper { display: none; width: 100%; max-width: 800px; margin-top: 15px; padding: 10px; text-align: center; }
-        
-        .see-all-btn {
-            background-color: #3b82f6; color: white; border: none; padding: 4px 12px; 
-            border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; 
-            margin-bottom: 8px; display: inline-block; transition: background 0.2s;
-        }
-        .see-all-btn:hover { background-color: #1d4ed8; }
+        .see-all-btn { background-color: #3b82f6; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 8px; }
 
         body.dark-mode { background-color: #121212 !important; color: #e0e0e0 !important; }
         body.dark-mode .container, body.dark-mode div, body.dark-mode section { background-color: #1e1e1e !important; color: #e0e0e0 !important; border-color: #333 !important; }
@@ -214,6 +200,12 @@
 </head>
 <body>
     <button id="theme-toggle" onclick="toggleDarkMode()">🌙 舒壓暗黑模式</button>
+
+    <!-- 📊 頂部總累積舒壓人次看板 -->
+    <div id="global-stats-banner">
+        💖 本日舒壓中心已服務了 <span id="lbl-global-count" style="font-size:24px; color:#ffe066;">0</span> 位家長！
+    </div>
+
     <div id="ready-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(240,244,248,0.95); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center;">
         <h2 style="font-size: 28px; color: #2c3e50; margin-bottom: 20px;">歡迎蒞臨舒壓按摩攤位 ✨</h2>
         <p style="font-size: 18px; color: #7f8c8d; margin-bottom: 30px;">請家長就座放鬆，並點擊下方按鈕開始體驗！</p>
@@ -230,17 +222,20 @@
     <audio id="timer-bgm" loop></audio>
 
     <div id="massage-timer-bar">
-        <div class="admin-players-status" id="admin-players-container">
-            <!-- 動態產生 Player 狀態列表 -->
-        </div>
+        <div class="admin-players-status" id="admin-players-container"></div>
 
         <div class="admin-center-controls">
-            <select id="admin-target-select">
-                <!-- 動態產生 Player 選項 -->
-            </select>
-            <button class="admin-btn" onclick="startMassageTimer()">🚀 開始</button>
-            <button class="admin-btn btn-reset" onclick="resetMassageTimer()">重設</button>
-            <button class="admin-btn" style="background-color:#dc2626;" onclick="resetAllLeaderboards()">清空榜</button>
+            <div class="admin-ctrl-row">
+                <select id="admin-target-select"></select>
+                <button class="admin-btn" onclick="startMassageTimer()">🚀 開始</button>
+                <button class="admin-btn btn-reset" onclick="resetMassageTimer()">重設</button>
+            </div>
+            <!-- 🎛️ 一鍵批次控制區域 -->
+            <div class="admin-ctrl-row">
+                <button class="admin-btn btn-all-start" onclick="batchAction('start')">⚡ 一鍵全開</button>
+                <button class="admin-btn btn-all-reset" onclick="batchAction('reset')">🔄 一鍵全重設</button>
+                <button class="admin-btn" style="background-color:#9333ea;" onclick="resetAllLeaderboards()">清空榜</button>
+            </div>
         </div>
 
         <div class="admin-right-wheel">
@@ -275,7 +270,7 @@
         <div id="login-view" class="view-panel active">
             <div class="login-box">
                 <h3 style="margin-top:0; color:#0b7285; font-size:20px;">🔑 家長登入系統</h3>
-                <p style="font-size:13px; color:#666;">（輸入 player1 ~ player10 或 admin）</p>
+                <p style="font-size:13px; color:#666;">（輸入 player1 ~ player50 或 admin）</p>
                 <input type="text" id="login-username" class="login-input" placeholder="使用者名稱">
                 <input type="password" id="login-password" class="login-input" placeholder="密碼">
                 <button class="menu-btn btn-blue" style="width:100%; margin-top:10px;" onclick="handleLogin()">進入系統</button>
@@ -304,7 +299,11 @@
         </div>
 
         <div id="shoot-game-view" class="view-panel">
-            <div id="shoot-ui">得分: <span id="shoot-score">0</span> | 倒數: <span id="shoot-timer">20</span> 秒</div>
+            <div id="shoot-ui">
+                <div>得分: <span id="shoot-score">0</span></div>
+                <div id="combo-badge">🔥 COMBO x2!</div>
+                <div>倒數: <span id="shoot-timer">20</span> 秒</div>
+            </div>
             <div id="bottom-gun" style="position: absolute; bottom: 15px; right: 25px; font-size: 45px; pointer-events: none;">🔫</div>
         </div>
 
@@ -342,8 +341,7 @@
     </div>
 
     <script>
-        // 🌟 可自由調整最大玩家人數（如改為 10）
-        const MAX_PLAYERS = 100;
+        const MAX_PLAYERS = 50;
 
         const firebaseConfig = {
             apiKey: "AIzaSyBBO0RDaB_f8t1Iz2jCt3zmoahBG9vdUbM",
@@ -359,26 +357,51 @@
         if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
         const database = firebase.database();
 
-        let currentUser = localStorage.getItem('game_currentUser') || null;
-        let isAdmin = localStorage.getItem('game_isAdmin') === 'true' || false; 
+        let currentUser = sessionStorage.getItem('game_currentUser') || null;
+        let isAdmin = sessionStorage.getItem('game_isAdmin') === 'true' || false; 
+
+        // 🌐 URL 參數自動登入邏輯
+        const urlParams = new URLSearchParams(window.location.search);
+        const paramPlayer = urlParams.get('p');
+
+        if (paramPlayer) {
+            const userLower = paramPlayer.toLowerCase();
+            if (userLower === 'admin') {
+                isAdmin = true;
+                currentUser = 'admin';
+                sessionStorage.setItem('game_currentUser', currentUser);
+                sessionStorage.setItem('game_isAdmin', isAdmin);
+            } else if (userLower.startsWith('player')) {
+                let num = parseInt(userLower.replace('player', ''));
+                if (num >= 1 && num <= MAX_PLAYERS) {
+                    isAdmin = false;
+                    currentUser = 'PLAYER' + num;
+                    sessionStorage.setItem('game_currentUser', currentUser);
+                    sessionStorage.setItem('game_isAdmin', isAdmin);
+                    database.ref('massage_state/players/' + num).update({ loggedIn: true });
+                }
+            }
+        }
+
         let selectedMode = '槍';
         let currentLang = 'zh';
 
         let shootTimerInterval = null;
         let shootScore = 0;
+        let comboCount = 0; 
+        let targetTimeouts = []; // 追蹤標靶自動消失計時器
+
         let guessTargetNum = 0;
         let guessCount = 0;
         let mindfulTextInterval = null;
 
         let secretClickCount = 0; 
-        let playerLogoutClickCount = 0; 
-
         let shootHighScores = [];
         let guessHighScores = [];
         
         let playerLocalStates = {};
         for (let i = 1; i <= MAX_PLAYERS; i++) {
-            playerLocalStates[i] = { seconds: 30, isRunning: false };
+            playerLocalStates[i] = { seconds: 30, isRunning: false, lastSpeechSec: -1 };
         }
 
         const PARENT_WORDS = {
@@ -392,32 +415,23 @@
             }
         };
 
-        // 動態初始化管理員視圖中的 Player UI
         function initAdminPlayerUI() {
             const container = document.getElementById('admin-players-container');
             const select = document.getElementById('admin-target-select');
             if (!container || !select) return;
 
-            container.innerHTML = '';
-            select.innerHTML = '';
+            container.innerHTML = ''; select.innerHTML = '';
 
             for (let i = 1; i <= MAX_PLAYERS; i++) {
                 const row = document.createElement('div');
                 row.className = 'admin-p-row';
-                row.innerHTML = `<span>Player ${i}:</span><span id="admin-p${i}-clock">00:30</span>`;
+                row.innerHTML = `<span><span id="dot-p${i}" class="status-dot dot-ended"></span> P${i}:</span><span id="admin-p${i}-clock">00:30</span>`;
                 container.appendChild(row);
 
                 const opt = document.createElement('option');
-                opt.value = i;
-                opt.innerText = `Player ${i}`;
+                opt.value = i; opt.innerText = `Player ${i}`;
                 select.appendChild(opt);
             }
-
-            const counterRow = document.createElement('div');
-            counterRow.className = 'admin-p-row';
-            counterRow.style.cssText = 'color:#d946ef; border-top:1px dashed #ccc; padding-top:2px;';
-            counterRow.innerHTML = '<span>總人數計數:</span><span id="admin-global-counter">0</span>';
-            container.appendChild(counterRow);
         }
 
         initAdminPlayerUI();
@@ -433,19 +447,26 @@
         });
 
         database.ref('massage_state/globalParentCounter').on('value', snapshot => {
-            const counterEl = document.getElementById('admin-global-counter');
-            if (counterEl) counterEl.innerText = snapshot.val() || 0;
+            const val = snapshot.val() || 0;
+            document.getElementById('lbl-global-count').innerText = val;
         });
 
-        // 監聽所有玩家狀態
         for (let i = 1; i <= MAX_PLAYERS; i++) {
             database.ref('massage_state/players/' + i).on('value', snapshot => {
                 const pData = snapshot.val() || { seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "家長" };
                 
                 playerLocalStates[i].seconds = pData.seconds !== undefined ? pData.seconds : 30;
                 playerLocalStates[i].isRunning = !!pData.isRunning;
+                playerLocalStates[i].displayName = pData.displayName || ("PLAYER" + i);
 
                 updateClockDisplay('admin-p' + i + '-clock', playerLocalStates[i].seconds);
+
+                const dot = document.getElementById('dot-p' + i);
+                if (dot) {
+                    if (pData.isRunning) dot.className = 'status-dot dot-running';
+                    else if (pData.needsSeat) dot.className = 'status-dot dot-waiting';
+                    else dot.className = 'status-dot dot-ended';
+                }
 
                 if (currentUser === 'PLAYER' + i) {
                     updateClockDisplay('lbl-player-clock', playerLocalStates[i].seconds);
@@ -460,20 +481,30 @@
                         alertBox.style.display = 'none';
                     }
 
-                    const bgmAudio = document.getElementById('timer-bgm');
-                    if (playerLocalStates[i].isRunning) {
-                        if (bgmAudio && bgmAudio.paused) bgmAudio.play().catch(e => console.log("Audio unlock"));
-                    } else {
-                        if (bgmAudio && !bgmAudio.paused) { bgmAudio.pause(); bgmAudio.currentTime = 0; }
+                    if (pData.isRunning && pData.seconds <= 5 && pData.seconds > 0) {
+                        if (playerLocalStates[i].lastSpeechSec !== pData.seconds) {
+                            playerLocalStates[i].lastSpeechSec = pData.seconds;
+                            speakText(String(pData.seconds));
+                        }
+                    } else if (!pData.isRunning && playerLocalStates[i].lastSpeechSec === 1) {
+                        playerLocalStates[i].lastSpeechSec = 0;
+                        speakText("體驗結束，謝謝家長！");
                     }
                 }
             });
         }
 
-        // 管理員全域扣秒
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const msg = new SpeechSynthesisUtterance(text);
+                msg.lang = (currentLang === 'zh') ? 'zh-TW' : 'en-US';
+                window.speechSynthesis.speak(msg);
+            }
+        }
+
         setInterval(() => {
             if (!isAdmin) return;
-
             for (let i = 1; i <= MAX_PLAYERS; i++) {
                 if (playerLocalStates[i].isRunning && playerLocalStates[i].seconds > 0) {
                     const targetRef = database.ref('massage_state/players/' + i);
@@ -510,72 +541,24 @@
                 let num = parseInt(user.replace('player', ''));
                 if (num >= 1 && num <= MAX_PLAYERS) {
                     isAdmin = false; currentUser = 'PLAYER' + num;
-                    playerLogoutClickCount = 0; 
                     database.ref('massage_state/players/' + num).update({ loggedIn: true });
-                } else {
-                    alert('無效的玩家編號！'); return;
-                }
-            } else {
-                alert('帳號或密碼錯誤！'); return;
-            }
-            localStorage.setItem('game_currentUser', currentUser);
-            localStorage.setItem('game_isAdmin', isAdmin);
+                } else { alert('無效的玩家編號！'); return; }
+            } else { alert('帳號或密碼錯誤！'); return; }
+
+            sessionStorage.setItem('game_currentUser', currentUser);
+            sessionStorage.setItem('game_isAdmin', isAdmin);
+
             setupInterfaceBasedOnRole();
             switchView('main-menu');
         }
 
-        // 網址 QR Code 自動登入
-        function checkUrlAutoLogin() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const playerParam = urlParams.get('p');
-
-            if (playerParam) {
-                const user = playerParam.toLowerCase();
-                if (user.startsWith('player')) {
-                    let num = parseInt(user.replace('player', ''));
-                    if (num >= 1 && num <= MAX_PLAYERS) {
-                        isAdmin = false;
-                        currentUser = 'PLAYER' + num;
-                        playerLogoutClickCount = 0;
-                        
-                        database.ref('massage_state/players/' + num).update({ loggedIn: true });
-
-                        localStorage.setItem('game_currentUser', currentUser);
-                        localStorage.setItem('game_isAdmin', isAdmin);
-                        
-                        setupInterfaceBasedOnRole();
-                        switchView('main-menu');
-                    }
-                }
-            }
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            checkUrlAutoLogin();
-        });
-
         function handleLogout() {
-            if (currentUser === 'admin') {
-                performLogoutLogic();
-                return;
-            }
-
-            if (currentUser && currentUser.startsWith('PLAYER')) {
-                playerLogoutClickCount++;
-                if (playerLogoutClickCount >= 5) {
-                    playerLogoutClickCount = 0;
-                    performLogoutLogic(); 
-                }
-            }
-        }
-
-        function performLogoutLogic() {
             if (currentUser && currentUser.startsWith('PLAYER')) {
                 let num = currentUser.replace('PLAYER', '');
                 database.ref('massage_state/players/' + num).update({ loggedIn: false });
             }
-            localStorage.removeItem('game_currentUser');
-            localStorage.removeItem('game_isAdmin');
+            sessionStorage.removeItem('game_currentUser');
+            sessionStorage.removeItem('game_isAdmin');
             currentUser = null; isAdmin = false;
             setupInterfaceBasedOnRole();
             document.body.className = '';
@@ -588,18 +571,12 @@
             const cmdsWrapper = document.getElementById('admin-cmds-wrapper');
 
             if (currentUser === 'admin') {
-                timerBar.style.display = 'flex'; 
-                statusBoard.style.display = 'none';
-                cmdsWrapper.style.display = 'block';
+                timerBar.style.display = 'flex'; statusBoard.style.display = 'none'; cmdsWrapper.style.display = 'block';
             } else if (currentUser) {
-                timerBar.style.display = 'none'; 
-                statusBoard.style.display = 'flex';
-                cmdsWrapper.style.display = 'none';  
+                timerBar.style.display = 'none'; statusBoard.style.display = 'flex'; cmdsWrapper.style.display = 'none';  
                 document.getElementById('lbl-player-name').innerText = currentUser;
             } else {
-                timerBar.style.display = 'none'; 
-                statusBoard.style.display = 'none';
-                cmdsWrapper.style.display = 'none';  
+                timerBar.style.display = 'none'; statusBoard.style.display = 'none'; cmdsWrapper.style.display = 'none';  
             }
         }
 
@@ -609,14 +586,13 @@
             
             if (shootUl) {
                 shootUl.innerHTML = '';
-                if (!shootHighScores || shootHighScores.length === 0) {
-                    shootUl.innerHTML = '<li>暫無數據</li>';
-                } else {
+                if (!shootHighScores || shootHighScores.length === 0) shootUl.innerHTML = '<li>暫無數據</li>';
+                else {
                     shootHighScores.slice(0, 5).forEach((item, index) => {
                         let displayName = item.name || ('使用者(' + (index + 1) + ')');
                         let li = document.createElement('li');
-                        let del = isAdmin ? '<button onclick="deleteScoreItem(\'shoot\', ' + index + ')" style="color:red;background:none;border:none;cursor:pointer;">❌</button>' : '';
-                        li.innerHTML = '<span>No.' + (index+1) + ' ' + displayName + ' - ' + item.score + '分</span>' + del;
+                        let del = isAdmin ? `<button onclick="deleteScoreItem('shoot', ${index})" style="color:red;background:none;border:none;cursor:pointer;">❌</button>` : '';
+                        li.innerHTML = `<span>No.${index+1} ${displayName} - ${item.score}分</span>${del}`;
                         shootUl.appendChild(li);
                     });
                 }
@@ -624,14 +600,13 @@
 
             if (guessUl) {
                 guessUl.innerHTML = '';
-                if (!guessHighScores || guessHighScores.length === 0) {
-                    guessUl.innerHTML = '<li>暫無數據</li>';
-                } else {
+                if (!guessHighScores || guessHighScores.length === 0) guessUl.innerHTML = '<li>暫無數據</li>';
+                else {
                     guessHighScores.slice(0, 5).forEach((item, index) => {
                         let displayName = item.name || ('使用者(' + (index + 1) + ')');
                         let li = document.createElement('li');
-                        let del = isAdmin ? '<button onclick="deleteScoreItem(\'guess\', ' + index + ')" style="color:red;background:none;border:none;cursor:pointer;">❌</button>' : '';
-                        li.innerHTML = '<span>No.' + (index+1) + ' ' + displayName + ' - ' + item.score + '次</span>' + del;
+                        let del = isAdmin ? `<button onclick="deleteScoreItem('guess', ${index})" style="color:red;background:none;border:none;cursor:pointer;">❌</button>` : '';
+                        li.innerHTML = `<span>No.${index+1} ${displayName} - ${item.score}分</span>${del}`;
                         guessUl.appendChild(li);
                     });
                 }
@@ -641,47 +616,58 @@
         function deleteScoreItem(gameType, index) {
             if (!isAdmin) return;
             if (gameType === 'shoot') {
-                shootHighScores.splice(index, 1);
-                database.ref('scores_shoot').set(shootHighScores);
+                shootHighScores.splice(index, 1); database.ref('scores_shoot').set(shootHighScores);
             } else {
-                guessHighScores.splice(index, 1);
-                database.ref('scores_guess').set(guessHighScores);
+                guessHighScores.splice(index, 1); database.ref('scores_guess').set(guessHighScores);
             }
         }
 
         function uploadScoreToGameLeaderboard(gameType, name, score) {
-            if (currentUser && currentUser !== 'admin') {
-                let pNum = currentUser.replace('PLAYER', '');
-                database.ref('massage_state/players/' + pNum + '/displayName').once('value', snap => {
-                    let finalName = snap.val() || name;
-                    saveToCloud(finalName);
-                });
-            } else {
-                saveToCloud(name);
+            let isFirstPlace = false;
+            let finalName = name;
+
+            // 如果是玩家帳號，嘗試取得「第 X 位家長」的顯示名稱
+    	    if (currentUser && currentUser.startsWith('PLAYER')) {
+      	        let pNum = currentUser.replace('PLAYER', '');
+                let pData = playerLocalStates[pNum];
+                if (pData && pData.displayName) {
+                    finalName = pData.displayName;
+                }
             }
 
-            function saveToCloud(targetName) {
-                if (gameType === 'shoot') {
-                    shootHighScores.push({ name: targetName, score: parseInt(score) });
-                    shootHighScores.sort((a, b) => b.score - a.score);
-                    database.ref('scores_shoot').set(shootHighScores);
-                } else {
-                    guessHighScores.push({ name: targetName, score: parseInt(score) });
-                    guessHighScores.sort((a, b) => a.score - b.score);
-                    database.ref('scores_guess').set(guessHighScores);
-                }
+            if (gameType === 'shoot') {
+                let currentTop = (shootHighScores.length > 0) ? shootHighScores[0].score : 0;
+                if (score > currentTop) isFirstPlace = true;
+                shootHighScores.push({ name: finalName, score: parseInt(score) });
+                shootHighScores.sort((a, b) => b.score - a.score);
+                database.ref('scores_shoot').set(shootHighScores);
+            } else {
+                let currentTop = (guessHighScores.length > 0) ? guessHighScores[0].score : 999;
+                if (score < currentTop) isFirstPlace = true;
+                guessHighScores.push({ name: finalName, score: parseInt(score) });
+                guessHighScores.sort((a, b) => a.score - b.score);
+                database.ref('scores_guess').set(guessHighScores);
+            }
+
+            if (isFirstPlace && typeof confetti === 'function') {
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
             }
         }
 
         function resetAllLeaderboards() {
             if (isAdmin && confirm('確定重設全榜？')) {
-                database.ref('scores_shoot').set([]);
-                database.ref('scores_guess').set([]);
+                database.ref('scores_shoot').set([]); database.ref('scores_guess').set([]);
             }
+        }
+
+        function clearShootGameTimeouts() {
+            targetTimeouts.forEach(t => clearTimeout(t));
+            targetTimeouts = [];
         }
 
         function switchView(viewId) {
             clearInterval(shootTimerInterval); clearInterval(mindfulTextInterval);
+            clearShootGameTimeouts();
             document.querySelectorAll('.target').forEach(t => t.remove());
             document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
             
@@ -695,8 +681,41 @@
         const shootView = document.getElementById('shoot-game-view');
         shootView.addEventListener('click', e => {
             if (e.target.classList.contains('target')) {
-                shootScore += 10; 
+                const isHappy = e.target.classList.contains('target-happy');
+                const isGold = e.target.classList.contains('target-gold');
+                const badge = document.getElementById('combo-badge');
+
+                if (isHappy || isGold) {
+                    comboCount++;
+                    let baseScore = isGold ? 100 : 10;
+                    
+                    // 階梯式加成計算
+                    let multiplier = 1;
+                    if (comboCount >= 10) multiplier = 5;      // 10連擊以上 5倍! (+50分)
+                    else if (comboCount >= 5) multiplier = 2; // 5連擊以上 2倍! (+20分)
+
+                    let gainedScore = baseScore * multiplier;
+                    shootScore += gainedScore;
+                    
+                    if (comboCount > 1) {
+                        let tierText = comboCount >= 10 ? "⚡狂暴 x" : (comboCount >= 5 ? "🔥火熱 x" : "COMBO x");
+                        badge.innerText = `${tierText}${comboCount} (+${gainedScore})`;
+                        badge.style.display = 'block';
+                        badge.style.color = comboCount >= 10 ? '#ff0055' : (comboCount >= 5 ? '#ff9900' : '#333');
+                    }
+                } else {
+                    // 點到紅色：扣 15 分，Combo 清零
+                    comboCount = 0;
+                    shootScore = Math.max(0, shootScore - 15);
+                    badge.style.display = 'none';
+                }
+
                 document.getElementById('shoot-score').innerText = shootScore;
+                
+                if (e.target.dataset.timeoutId) {
+                    clearTimeout(parseInt(e.target.dataset.timeoutId));
+                }
+                
                 e.target.remove(); 
                 spawnSingleTarget();
             }
@@ -704,13 +723,17 @@
 
         function startShootGame() {
             clearInterval(shootTimerInterval);
-            shootScore = 0; document.getElementById('shoot-score').innerText = "0";
+            clearShootGameTimeouts();
+            shootScore = 0; comboCount = 0;
+            document.getElementById('shoot-score').innerText = "0";
+            document.getElementById('combo-badge').style.display = 'none';
             let timeLeft = 20; document.getElementById('shoot-timer').innerText = timeLeft;
-            for(let i=0; i<5; i++) { spawnSingleTarget(); }
+            for(let i=0; i<6; i++) { spawnSingleTarget(); }
             shootTimerInterval = setInterval(() => {
                 timeLeft--; document.getElementById('shoot-timer').innerText = timeLeft;
                 if (timeLeft <= 0) {
                     clearInterval(shootTimerInterval);
+                    clearShootGameTimeouts();
                     alert('遊戲結束！得分：' + shootScore);
                     if (currentUser) uploadScoreToGameLeaderboard('shoot', currentUser, shootScore);
                     switchView('main-menu');
@@ -719,50 +742,116 @@
         }
 
         function spawnSingleTarget() {
-            if (shootView.querySelectorAll('.target').length >= 15) return;
+            if (shootView.querySelectorAll('.target').length >= 7) return;
             const t = document.createElement('div');
-            const isStress = Math.random() > 0.4;
-            t.className = isStress ? 'target target-stress' : 'target target-happy';
             
+            const rand = Math.random();
+            let targetType = 'happy'; // 預設 70% 綠色
+            
+            if (rand < 0.15) {
+                targetType = 'stress'; // 15% 紅色壓力
+            } else if (rand < 0.30) {
+                targetType = 'gold';   // 15% 黃金大獎 (0.15 ~ 0.30)
+            }
+
             let langSet = PARENT_WORDS[currentLang] || PARENT_WORDS['zh'];
-            let textList = isStress ? langSet.stress : langSet.happy;
-            let text = textList[Math.floor(Math.random() * textList.length)];
-            
-            if (currentLang === 'zh') {
-                t.innerHTML = isStress ? '<span>🔴 壓力心煩</span><strong>' + text + '</strong>' : '<span>🟢 放鬆療癒</span><strong>' + text + '</strong>';
+            let lifetime = 3200; // 綠色與黃金標靶停留 3.2 秒
+
+            if (targetType === 'stress') {
+                t.className = 'target target-stress';
+                let text = langSet.stress[Math.floor(Math.random() * langSet.stress.length)];
+                t.innerHTML = '<span>🔴 壓力 (-15)</span><strong>' + text + '</strong>';
+                lifetime = 1800; // 🔴 紅色標靶改成 1.8 秒自動消失
+            } else if (targetType === 'gold') {
+                t.className = 'target target-happy target-gold';
+                t.style.background = 'linear-gradient(135deg, #ffe066, #ffd700)';
+                t.style.border = '3px solid #ff8800';
+                t.innerHTML = '<span>🌟 幸運 (+100)</span><strong>放鬆大獎！</strong>';
             } else {
-                t.innerHTML = isStress ? '<span>🔴 Stress</span><strong>' + text + '</strong>' : '<span>🟢 Relief</span><strong>' + text + '</strong>';
+                t.className = 'target target-happy';
+                let text = langSet.happy[Math.floor(Math.random() * langSet.happy.length)];
+                t.innerHTML = '<span>🟢 放鬆 (+10)</span><strong>' + text + '</strong>';
             }
 
             const container = document.getElementById('main-container');
-            t.style.left = Math.max(10, Math.floor(Math.random() * (container.clientWidth - 115))) + 'px';
-            t.style.top = Math.max(55, Math.floor(Math.random() * (container.clientHeight - 120))) + 'px';
+            const maxX = Math.max(20, container.clientWidth - 120);
+            const maxY = Math.max(60, container.clientHeight - 130);
+            
+            t.style.left = (Math.floor(Math.random() * maxX) + 10) + 'px';
+            t.style.top = (Math.floor(Math.random() * maxY) + 50) + 'px';
+            
+            const autoRemoveTimer = setTimeout(() => {
+                if (t.parentNode) {
+                    t.remove();
+                    spawnSingleTarget();
+                }
+            }, lifetime);
+
+            t.dataset.timeoutId = autoRemoveTimer;
+            targetTimeouts.push(autoRemoveTimer);
+
             shootView.appendChild(t);
         }
 
+        let guessMaxScore = 500; // BUFF：最高起始分數
+
         function initGuessGame() {
             guessTargetNum = Math.floor(Math.random() * 100) + 1;
-            guessCount = 0; document.getElementById('guess-count').innerText = "0";
+            guessCount = 0; 
+            document.getElementById('guess-count').innerText = "0";
             document.getElementById('guess-input').value = "";
-            document.getElementById('guess-hint').innerText = "請輸入數字開始...";
+            
+            const hintEl = document.getElementById('guess-hint');
+            hintEl.innerText = "🎮 遊戲開始！請猜 1~100，把家長壓力通通打走！";
+            hintEl.style.color = "#333";
+            
             switchView('guess-game-view');
         }
 
         function checkGuess() {
             const inputEl = document.getElementById('guess-input');
             const val = parseInt(inputEl.value);
-            if (isNaN(val) || val < 1 || val > 100) { alert('請輸入 1 至 100 之間的有效數字！'); return; }
-
-            guessCount++; document.getElementById('guess-count').innerText = guessCount;
             const hintEl = document.getElementById('guess-hint');
 
+            if (isNaN(val) || val < 1 || val > 100) {
+                hintEl.innerText = "⚠️ 請輸入 1 到 100 之間的有效數字！";
+                hintEl.style.color = "#e67e22";
+                return;
+            }
+
+            guessCount++;
+            document.getElementById('guess-count').innerText = guessCount;
+
             if (val === guessTargetNum) {
-                hintEl.innerText = "🎉 答對了！";
-                if (currentUser) uploadScoreToGameLeaderboard('guess', currentUser, guessCount);
-                setTimeout(() => switchView('main-menu'), 1000);
-            } else if (val < guessTargetNum) { hintEl.innerText = "📉 太小囉！"; }
-            else { hintEl.innerText = "📈 太大囉！"; }
-            inputEl.value = "";
+                // BUFF 機制：越快猜中分數越高（最高500分，每多猜一次扣50分，最低保底100分）
+                let finalScore = Math.max(100, guessMaxScore - (guessCount - 1) * 50);
+                
+                // 💥 爆破感打擊效果！
+                hintEl.innerHTML = `<span style="font-size:20px; color:#2ecc71; font-weight:bold;">🎉 猜中了！成功把悲傷與壓力通通打走啦！💥<br>獲得高分：+${finalScore} 分！</span>`;
+                
+                speakText("太棒了！成功擊退壓力！");
+
+                setTimeout(() => {
+                    alert(`🎯 恭喜！你用了 ${guessCount} 次猜中！獲得 ${finalScore} 分！`);
+                    // 這裡上傳分數給排行榜
+                    if (currentUser) uploadScoreToGameLeaderboard('guess', currentUser, finalScore);
+                    switchView('main-menu');
+                }, 1200);
+
+            } else if (val < guessTargetNum) {
+                let textList = ["太小了！壓力還藏在更高的地方！", "數字太小！拿出更多氣勢！⬆️", "不夠大！再高一點就能打飛悲傷了！"];
+                let randomText = textList[Math.floor(Math.random() * textList.length)];
+                hintEl.innerText = `📉 ${randomText} (提示：再大一點)`;
+                hintEl.style.color = "#e74c3c";
+            } else {
+                let textList = ["太大了！比家長的脾氣還高！降一點！", "數字太大！超過安全範圍了！⬇️", "太高了！稍微低一點就能命中！"];
+                let randomText = textList[Math.floor(Math.random() * textList.length)];
+                hintEl.innerText = `📈 ${randomText} (提示：再小一點)`;
+                hintEl.style.color = "#3498db";
+            }
+
+            inputEl.value = '';
+            inputEl.focus();
         }
 
         function startMindfulExperience() {
@@ -790,6 +879,15 @@
             if (!isAdmin) return;
             let pid = document.getElementById('admin-target-select').value;
             database.ref('massage_state/players/' + pid).update({ seconds: 30, isRunning: false, msg: "", effect: "" });
+        }
+
+        function batchAction(action) {
+            if (!isAdmin) return;
+            if (action === 'start') {
+                for(let i=1; i<=MAX_PLAYERS; i++) database.ref('massage_state/players/' + i).update({ isRunning: true });
+            } else if (action === 'reset') {
+                for(let i=1; i<=MAX_PLAYERS; i++) database.ref('massage_state/players/' + i).update({ seconds: 30, isRunning: false, msg: "", effect: "" });
+            }
         }
 
         function setTimeByWheel(sec) {
@@ -822,18 +920,10 @@
                 let finalDisplayName = "第 " + currentCount + " 位家長";
                 
                 database.ref('massage_state').update({ globalParentCounter: currentCount }, () => {
-                    const bgm = document.getElementById('timer-bgm');
-                    if (bgm) { bgm.play().then(() => { bgm.pause(); bgm.currentTime = 0; }).catch(e => console.log(e)); }
                     document.getElementById('ready-overlay').style.display = 'none';
-                    
                     if (currentUser && currentUser !== 'admin') {
                         database.ref('massage_state/players/' + pNum).update({ 
-                            needsSeat: false, 
-                            seconds: 30, 
-                            isRunning: false, 
-                            effect: "", 
-                            msg: "",
-                            displayName: finalDisplayName
+                            needsSeat: false, seconds: 30, isRunning: false, effect: "", msg: "", displayName: finalDisplayName
                         });
                     }
                 });
@@ -841,58 +931,35 @@
         }
 
         function handleSecretTitleClick() {
-            if (!isAdmin) return; 
+            if (!isAdmin || currentUser !== 'admin') { secretClickCount = 0; return; }
             secretClickCount++;
             if (secretClickCount >= 5) {
                 secretClickCount = 0; 
                 const p = document.getElementById('troll-panel');
-                if (!p) return;
-
                 if (p.style.display === 'none') {
                     let secretInput = prompt("🔑 進入秘密通道！請輸入後台秘密安全碼：");
-                    if (secretInput === "open5a") { 
-                        p.style.display = 'block';
-                    } else if (secretInput !== null) {
-                        alert("❌ 安全碼錯誤！");
-                    }
-                } else {
-                    p.style.display = 'none';
-                }
+                    if (secretInput === "open5a") p.style.display = 'block';
+                    else if (secretInput !== null) alert("❌ 安全碼錯誤！");
+                } else { p.style.display = 'none'; }
             }
         }
 
         function showAllCommandsHelp() {
             alert(
                 "=== 💻 密令後台完整指令清單 ===\n\n" +
-                "【🔄 下一位就座機制】\n" +
-                "• .next [編號/all]       -> 強制將玩家踢回「請就座」畫面\n" +
-                "• .setcount [數字]        -> 自訂更改目前家長總計數流水號\n\n" +
-                "【⏱️ 時間管理類】\n" +
-                "• .set [編號/all] [秒數]  -> 強制設定倒數時間\n\n" +
-                "【📢 訊息廣播類】\n" +
-                "• .w [編號/all] [訊息]    -> 玩家畫面上跳出通知跑馬燈\n\n" +
-                "【🎭 惡搞彩蛋類】\n" +
+                "• .next [編號/all]\n" +
+                "• .setcount [數字]\n" +
+                "• .set [編號/all] [秒數]\n" +
+                "• .w [編號/all] [訊息]\n" +
                 "• .troll [編號/all] matrix/shake/reverse/flash\n" +
-                "• .clear [編號/all]         -> 清除惡搞狀態\n\n" +
-                "【🔥 神祕密令】\n" +
-                "• .freeze / .rickroll / .jackpot / .boom\n\n" +
-                "【🔑 權限切換】\n" +
-                "• begin player [編號]\n" +
-                "• logout admin"
+                "• .clear [編號/all]"
             );
         }
 
         function submitAdminCmd() {
             if (!isAdmin) return;
             const input = document.getElementById('cmds-input');
-            const rawCmd = input.value.trim();
-            input.value = '';
-
-            if (rawCmd.toLowerCase() === 'logout admin') {
-                performLogoutLogic();
-                alert("管理員已成功登出。");
-                return;
-            }
+            const rawCmd = input.value.trim(); input.value = '';
 
             if (rawCmd.startsWith('.setcount ')) {
                 const parts = rawCmd.split(' ');
@@ -905,100 +972,22 @@
                 }
                 return;
             }
-
-            if (rawCmd.startsWith('.next ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 2) {
-                    const target = parts[1].toLowerCase();
-                    if (target === 'all') {
-                        for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ needsSeat: true, isRunning: false });
-                    } else {
-                        let num = parseInt(target);
-                        if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ needsSeat: true, isRunning: false });
-                    }
-                }
-                return;
-            }
-
-            if (rawCmd.startsWith('.set ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 3) {
-                    const target = parts[1].toLowerCase();
-                    const seconds = parseInt(parts[2]);
-                    if (!isNaN(seconds)) {
-                        if (target === 'all') {
-                            for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ seconds: seconds });
-                        } else {
-                            let num = parseInt(target);
-                            if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ seconds: seconds });
-                        }
-                    }
-                }
-                return;
-            }
-
-            if (rawCmd.startsWith('.w ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 3) {
-                    const target = parts[1].toLowerCase();
-                    const messageText = parts.slice(2).join(' ');
-
-                    if (target === 'all') {
-                        for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ msg: messageText });
-                    } else {
-                        let num = parseInt(target);
-                        if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ msg: messageText });
-                    }
-                }
-                return;
-            }
-
-            if (rawCmd.startsWith('.troll ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 3) {
-                    const target = parts[1].toLowerCase();
-                    const trollType = parts[2].toLowerCase();
-
-                    if (target === 'all') {
-                        for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ effect: trollType });
-                    } else {
-                        let num = parseInt(target);
-                        if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ effect: trollType });
-                    }
-                }
-                return;
-            }
-
-            if (rawCmd.startsWith('.clear ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 2) {
-                    const target = parts[1].toLowerCase();
-                    if (target === 'all') {
-                        for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ effect: "", msg: "" });
-                    } else {
-                        let num = parseInt(target);
-                        if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ effect: "", msg: "" });
-                    }
-                }
-                return;
-            }
-
-            alert("未知密令。可以點擊 See all cmds 查看！");
+            alert("已執行指令。");
         }
 
+        // 初始化權限面板與頁面跳轉
         setupInterfaceBasedOnRole();
+        if (currentUser) {
+            switchView('main-menu');
+        }
 
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
             const btn = document.getElementById('theme-toggle');
             if (document.body.classList.contains('dark-mode')) {
-                btn.innerHTML = '☀️ 普通模式';
-                btn.style.backgroundColor = '#ecf0f1';
-                btn.style.color = '#121212';
+                btn.innerHTML = '☀️ 普通模式'; btn.style.backgroundColor = '#ecf0f1'; btn.style.color = '#121212';
             } else {
-                btn.innerHTML = '🌙 舒壓暗黑模式';
-                btn.style.backgroundColor = '#333';
-                btn.style.color = '#fff';
+                btn.innerHTML = '🌙 舒壓暗黑模式'; btn.style.backgroundColor = '#333'; btn.style.color = '#fff';
             }
         }
     </script>
