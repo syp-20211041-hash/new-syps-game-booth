@@ -67,7 +67,7 @@
 
         .admin-players-status {
             display: flex; flex-direction: column; gap: 4px; background: rgba(255,255,255,0.5);
-            padding: 6px 10px; border-radius: 8px; border: 1px solid #b2f2bb; min-width: 150px;
+            padding: 6px 10px; border-radius: 8px; border: 1px solid #b2f2bb; min-width: 180px; max-height: 120px; overflow-y: auto;
         }
         .admin-p-row { display: flex; justify-content: space-between; gap: 15px; font-family: monospace; font-size: 13px; }
 
@@ -196,7 +196,6 @@
         .leaderboard-list li { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: bold; }
         .leaderboard-list li:last-child { border-bottom: none; }
 
-        /* 指令後台區塊 */
         #admin-cmds-wrapper { display: none; width: 100%; max-width: 800px; margin-top: 15px; padding: 10px; text-align: center; }
         
         .see-all-btn {
@@ -205,14 +204,16 @@
             margin-bottom: 8px; display: inline-block; transition: background 0.2s;
         }
         .see-all-btn:hover { background-color: #1d4ed8; }
+
+        body.dark-mode { background-color: #121212 !important; color: #e0e0e0 !important; }
+        body.dark-mode .container, body.dark-mode div, body.dark-mode section { background-color: #1e1e1e !important; color: #e0e0e0 !important; border-color: #333 !important; }
+        body.dark-mode button { background-color: #2980b9 !important; color: #fff !important; }
+        body.dark-mode input, body.dark-mode select { background-color: #2d2d2d !important; color: #fff !important; border: 1px solid #555 !important; }
+        #theme-toggle { position: fixed; top: 15px; right: 15px; z-index: 9999; padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
-	<!-- EDB 頂部參展標題列 (帶行內樣式，確保 100% 成功顯示) -->
-	<div style="width: 100%; max-width: 800px; background: linear-gradient(135deg, #0b7285, #15aabf); color: white; padding: 12px 20px; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box;">
-    <div style="font-size: 16px; font-weight: bold; letter-spacing: 0.5px; color: #ffffff;">🏫 香港教育局 (EDB) 參展項目 | 親子舒壓互動體驗館</div>
-    <div style="background: rgba(255,255,255,0.25); padding: 4px 12px; border-radius: 15px; font-size: 12px; font-weight: bold; color: #ffffff; white-space: nowrap;"> Booth 展示模式 </div>
-</div>
+    <button id="theme-toggle" onclick="toggleDarkMode()">🌙 舒壓暗黑模式</button>
     <div id="ready-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(240,244,248,0.95); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center;">
         <h2 style="font-size: 28px; color: #2c3e50; margin-bottom: 20px;">歡迎蒞臨舒壓按摩攤位 ✨</h2>
         <p style="font-size: 18px; color: #7f8c8d; margin-bottom: 30px;">請家長就座放鬆，並點擊下方按鈕開始體驗！</p>
@@ -229,18 +230,13 @@
     <audio id="timer-bgm" loop></audio>
 
     <div id="massage-timer-bar">
-        <div class="admin-players-status">
-            <div class="admin-p-row"><span>Player 1:</span><span id="admin-p1-clock">00:30</span></div>
-            <div class="admin-p-row"><span>Player 2:</span><span id="admin-p2-clock">00:30</span></div>
-            <div class="admin-p-row"><span>Player 3:</span><span id="admin-p3-clock">00:30</span></div>
-            <div class="admin-p-row" style="color:#d946ef; border-top:1px dashed #ccc; padding-top:2px;"><span>總人數計數:</span><span id="admin-global-counter">0</span></div>
+        <div class="admin-players-status" id="admin-players-container">
+            <!-- 動態產生 Player 狀態列表 -->
         </div>
 
         <div class="admin-center-controls">
             <select id="admin-target-select">
-                <option value="1">Player 1</option>
-                <option value="2">Player 2</option>
-                <option value="3">Player 3</option>
+                <!-- 動態產生 Player 選項 -->
             </select>
             <button class="admin-btn" onclick="startMassageTimer()">🚀 開始</button>
             <button class="admin-btn btn-reset" onclick="resetMassageTimer()">重設</button>
@@ -279,7 +275,7 @@
         <div id="login-view" class="view-panel active">
             <div class="login-box">
                 <h3 style="margin-top:0; color:#0b7285; font-size:20px;">🔑 家長登入系統</h3>
-                <p style="font-size:13px; color:#666;">（輸入 player1, player2, player3 或 admin）</p>
+                <p style="font-size:13px; color:#666;">（輸入 player1 ~ player10 或 admin）</p>
                 <input type="text" id="login-username" class="login-input" placeholder="使用者名稱">
                 <input type="password" id="login-password" class="login-input" placeholder="密碼">
                 <button class="menu-btn btn-blue" style="width:100%; margin-top:10px;" onclick="handleLogin()">進入系統</button>
@@ -337,18 +333,18 @@
     <div id="admin-cmds-wrapper">
         <div id="troll-panel" style="display: none; margin-top: 10px; background: #1e1e1e; color: #34d399; padding: 15px; text-align: left; font-family: monospace; border-radius: 8px;">
             <h4 style="margin: 0 0 5px 0; color: #6ee7b7;">💻 CMDS BAR 指令後台系統</h4>
-            
             <div style="text-align: left;">
                 <button type="button" class="see-all-btn" onclick="showAllCommandsHelp()">📜 檢視所有指令 (See all cmds)</button>
             </div>
-
             <input type="text" id="cmds-input" placeholder="輸入指令... (例如: .next 1)" style="background: #111; color: #34d399; border: 1px solid #34d399; padding: 6px; width: 75%; border-radius: 4px;">
             <button onclick="submitAdminCmd()" style="background: #34d399; color: #000; border: none; padding: 6px 14px; font-weight: bold; cursor: pointer; border-radius: 4px;">執行</button>
         </div>
     </div>
 
     <script>
-        // 1. Firebase 初始化
+        // 🌟 可自由調整最大玩家人數（如改為 10）
+        const MAX_PLAYERS = 100;
+
         const firebaseConfig = {
             apiKey: "AIzaSyBBO0RDaB_f8t1Iz2jCt3zmoahBG9vdUbM",
             authDomain: "school-booth-game.firebaseapp.com",
@@ -363,7 +359,6 @@
         if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
         const database = firebase.database();
 
-        // 2. 全域變數
         let currentUser = localStorage.getItem('game_currentUser') || null;
         let isAdmin = localStorage.getItem('game_isAdmin') === 'true' || false; 
         let selectedMode = '槍';
@@ -381,11 +376,10 @@
         let shootHighScores = [];
         let guessHighScores = [];
         
-        let playerLocalStates = {
-            1: { seconds: 30, isRunning: false },
-            2: { seconds: 30, isRunning: false },
-            3: { seconds: 30, isRunning: false }
-        };
+        let playerLocalStates = {};
+        for (let i = 1; i <= MAX_PLAYERS; i++) {
+            playerLocalStates[i] = { seconds: 30, isRunning: false };
+        }
 
         const PARENT_WORDS = {
             zh: {
@@ -398,36 +392,61 @@
             }
         };
 
-        // 3. 排行榜與全域計數器單獨監聽
-        database.ref('scores_shoot').on('value', function(snapshot) {
+        // 動態初始化管理員視圖中的 Player UI
+        function initAdminPlayerUI() {
+            const container = document.getElementById('admin-players-container');
+            const select = document.getElementById('admin-target-select');
+            if (!container || !select) return;
+
+            container.innerHTML = '';
+            select.innerHTML = '';
+
+            for (let i = 1; i <= MAX_PLAYERS; i++) {
+                const row = document.createElement('div');
+                row.className = 'admin-p-row';
+                row.innerHTML = `<span>Player ${i}:</span><span id="admin-p${i}-clock">00:30</span>`;
+                container.appendChild(row);
+
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = `Player ${i}`;
+                select.appendChild(opt);
+            }
+
+            const counterRow = document.createElement('div');
+            counterRow.className = 'admin-p-row';
+            counterRow.style.cssText = 'color:#d946ef; border-top:1px dashed #ccc; padding-top:2px;';
+            counterRow.innerHTML = '<span>總人數計數:</span><span id="admin-global-counter">0</span>';
+            container.appendChild(counterRow);
+        }
+
+        initAdminPlayerUI();
+
+        database.ref('scores_shoot').on('value', snapshot => {
             shootHighScores = snapshot.val() || [];
             renderSeparateLeaderboards();
         });
 
-        database.ref('scores_guess').on('value', function(snapshot) {
+        database.ref('scores_guess').on('value', snapshot => {
             guessHighScores = snapshot.val() || [];
             renderSeparateLeaderboards();
         });
 
-        database.ref('massage_state/globalParentCounter').on('value', function(snapshot) {
+        database.ref('massage_state/globalParentCounter').on('value', snapshot => {
             const counterEl = document.getElementById('admin-global-counter');
             if (counterEl) counterEl.innerText = snapshot.val() || 0;
         });
 
-        // 直達路徑監聽玩家狀態
-        for (let i = 1; i <= 3; i++) {
-            database.ref('massage_state/players/' + i).on('value', function(snapshot) {
+        // 監聽所有玩家狀態
+        for (let i = 1; i <= MAX_PLAYERS; i++) {
+            database.ref('massage_state/players/' + i).on('value', snapshot => {
                 const pData = snapshot.val() || { seconds: 30, isRunning: false, msg: "", effect: "", needsSeat: false, displayName: "家長" };
                 
                 playerLocalStates[i].seconds = pData.seconds !== undefined ? pData.seconds : 30;
                 playerLocalStates[i].isRunning = !!pData.isRunning;
 
-                // 🌟 修正：修正了 admin-p2-clock 的引號錯誤，確保時間能更新不報錯！
-                updateClockDisplay('admin-p1-clock', playerLocalStates[1].seconds);
-                updateClockDisplay('admin-p2-clock', playerLocalStates[2].seconds);
-                updateClockDisplay('admin-p3-clock', playerLocalStates[3].seconds);
+                updateClockDisplay('admin-p' + i + '-clock', playerLocalStates[i].seconds);
 
-                // 如果目前是對應的玩家畫面
                 if (currentUser === 'PLAYER' + i) {
                     updateClockDisplay('lbl-player-clock', playerLocalStates[i].seconds);
                     if (pData.displayName) document.getElementById('lbl-player-name').innerText = pData.displayName;
@@ -451,14 +470,14 @@
             });
         }
 
-        // 唯有管理員端會執行計時扣秒
-        setInterval(function() {
+        // 管理員全域扣秒
+        setInterval(() => {
             if (!isAdmin) return;
 
-            for (let i = 1; i <= 3; i++) {
+            for (let i = 1; i <= MAX_PLAYERS; i++) {
                 if (playerLocalStates[i].isRunning && playerLocalStates[i].seconds > 0) {
                     const targetRef = database.ref('massage_state/players/' + i);
-                    targetRef.transaction(function(currentData) {
+                    targetRef.transaction(currentData => {
                         if (!currentData) return currentData;
                         if (currentData.isRunning) {
                             currentData.seconds = (currentData.seconds || 1) - 1;
@@ -481,18 +500,21 @@
             el.innerText = mins + ':' + secs;
         }
 
-        // 4. 登入與登出系統
         function handleLogin() {
             const user = document.getElementById('login-username').value.trim().toLowerCase();
             const pass = document.getElementById('login-password').value;
 
             if (user === 'admin' && pass === 'bromisonez') {
                 isAdmin = true; currentUser = 'admin';
-            } else if ((user === 'player1' || user === 'player2' || user === 'player3') && pass === '123') {
-                isAdmin = false; currentUser = user.toUpperCase();
-                playerLogoutClickCount = 0; 
-                let num = user.replace('player', '');
-                database.ref('massage_state/players/' + num).update({ loggedIn: true });
+            } else if (user.startsWith('player') && pass === '123') {
+                let num = parseInt(user.replace('player', ''));
+                if (num >= 1 && num <= MAX_PLAYERS) {
+                    isAdmin = false; currentUser = 'PLAYER' + num;
+                    playerLogoutClickCount = 0; 
+                    database.ref('massage_state/players/' + num).update({ loggedIn: true });
+                } else {
+                    alert('無效的玩家編號！'); return;
+                }
             } else {
                 alert('帳號或密碼錯誤！'); return;
             }
@@ -501,6 +523,36 @@
             setupInterfaceBasedOnRole();
             switchView('main-menu');
         }
+
+        // 網址 QR Code 自動登入
+        function checkUrlAutoLogin() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const playerParam = urlParams.get('p');
+
+            if (playerParam) {
+                const user = playerParam.toLowerCase();
+                if (user.startsWith('player')) {
+                    let num = parseInt(user.replace('player', ''));
+                    if (num >= 1 && num <= MAX_PLAYERS) {
+                        isAdmin = false;
+                        currentUser = 'PLAYER' + num;
+                        playerLogoutClickCount = 0;
+                        
+                        database.ref('massage_state/players/' + num).update({ loggedIn: true });
+
+                        localStorage.setItem('game_currentUser', currentUser);
+                        localStorage.setItem('game_isAdmin', isAdmin);
+                        
+                        setupInterfaceBasedOnRole();
+                        switchView('main-menu');
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            checkUrlAutoLogin();
+        });
 
         function handleLogout() {
             if (currentUser === 'admin') {
@@ -551,7 +603,6 @@
             }
         }
 
-        // 排行榜控制
         function renderSeparateLeaderboards() {
             const shootUl = document.getElementById('shoot-leaderboard');
             const guessUl = document.getElementById('guess-leaderboard');
@@ -601,7 +652,7 @@
         function uploadScoreToGameLeaderboard(gameType, name, score) {
             if (currentUser && currentUser !== 'admin') {
                 let pNum = currentUser.replace('PLAYER', '');
-                database.ref('massage_state/players/' + pNum + '/displayName').once('value', function(snap) {
+                database.ref('massage_state/players/' + pNum + '/displayName').once('value', snap => {
                     let finalName = snap.val() || name;
                     saveToCloud(finalName);
                 });
@@ -629,7 +680,6 @@
             }
         }
 
-        // 遊戲功能
         function switchView(viewId) {
             clearInterval(shootTimerInterval); clearInterval(mindfulTextInterval);
             document.querySelectorAll('.target').forEach(t => t.remove());
@@ -643,7 +693,7 @@
         }
 
         const shootView = document.getElementById('shoot-game-view');
-        shootView.addEventListener('click', function(e) {
+        shootView.addEventListener('click', e => {
             if (e.target.classList.contains('target')) {
                 shootScore += 10; 
                 document.getElementById('shoot-score').innerText = shootScore;
@@ -653,11 +703,11 @@
         });
 
         function startShootGame() {
-            clearInterval(shootTimerInterval); // ✨ 手動補上這一行！
-	    shootScore = 0; document.getElementById('shoot-score').innerText = "0";
+            clearInterval(shootTimerInterval);
+            shootScore = 0; document.getElementById('shoot-score').innerText = "0";
             let timeLeft = 20; document.getElementById('shoot-timer').innerText = timeLeft;
             for(let i=0; i<5; i++) { spawnSingleTarget(); }
-            shootTimerInterval = setInterval(function() {
+            shootTimerInterval = setInterval(() => {
                 timeLeft--; document.getElementById('shoot-timer').innerText = timeLeft;
                 if (timeLeft <= 0) {
                     clearInterval(shootTimerInterval);
@@ -718,20 +768,18 @@
         function startMindfulExperience() {
             const textEl = document.getElementById('breath-text');
             let stage = 0; textEl.innerText = "吸氣...";
-            mindfulTextInterval = setInterval(function() {
+            mindfulTextInterval = setInterval(() => {
                 stage = (stage + 1) % 2;
                 textEl.innerText = (stage === 0) ? "吸氣..." : "呼氣...";
             }, 4000);
         }
 
-        // 管理面板控制
         function setMassageMode(mode) {
             selectedMode = mode;
             document.getElementById('mode-gun').classList.toggle('active', mode === '槍');
             document.getElementById('mode-hand').classList.toggle('active', mode === '手');
         }
 
-        // 啟動與倒數計時
         function startMassageTimer() {
             if (!isAdmin) return;
             let pid = document.getElementById('admin-target-select').value;
@@ -762,19 +810,18 @@
             if (bgm) { bgm.muted = !bgm.muted; document.getElementById('mute-btn-player').innerText = bgm.muted ? "🔇 已靜音" : "🔊 靜音"; }
         }
 
-        // 就座確認
         function confirmSeat() {
             let pNum = "1";
             if (currentUser && currentUser !== 'admin') {
                 pNum = currentUser.replace('PLAYER', '');
             }
 
-            database.ref('massage_state/globalParentCounter').once('value', function(snapshot) {
+            database.ref('massage_state/globalParentCounter').once('value', snapshot => {
                 let currentCount = snapshot.val() || 0;
                 currentCount += 1;
                 let finalDisplayName = "第 " + currentCount + " 位家長";
                 
-                database.ref('massage_state').update({ globalParentCounter: currentCount }, function() {
+                database.ref('massage_state').update({ globalParentCounter: currentCount }, () => {
                     const bgm = document.getElementById('timer-bgm');
                     if (bgm) { bgm.play().then(() => { bgm.pause(); bgm.currentTime = 0; }).catch(e => console.log(e)); }
                     document.getElementById('ready-overlay').style.display = 'none';
@@ -793,7 +840,6 @@
             });
         }
 
-        // 🔒 標題隱藏密鑰觸發機制
         function handleSecretTitleClick() {
             if (!isAdmin) return; 
             secretClickCount++;
@@ -819,46 +865,35 @@
             alert(
                 "=== 💻 密令後台完整指令清單 ===\n\n" +
                 "【🔄 下一位就座機制】\n" +
-                "• .next [1/2/3/all]        -> 不登出，但把玩家踢回「請就座」按鈕畫面\n" +
-                "• .setcount [數字]        -> 自訂更改目前家長總計數流水號 (例如: .setcount 10)\n\n" +
+                "• .next [編號/all]       -> 強制將玩家踢回「請就座」畫面\n" +
+                "• .setcount [數字]        -> 自訂更改目前家長總計數流水號\n\n" +
                 "【⏱️ 時間管理類】\n" +
-                "• .set [1/2/3/all] [秒數]  -> 強制設定倒數時間\n\n" +
+                "• .set [編號/all] [秒數]  -> 強制設定倒數時間\n\n" +
                 "【📢 訊息廣播類】\n" +
-                "• .w [1/2/3/all] [訊息]    -> 玩家畫面上跳出通知跑馬燈\n\n" +
-                "【🎭 惡搞彩蛋類 (Funny Hacks)】\n" +
-                "• .troll [1/2/3/all] matrix   -> 畫面變成黑客綠色代碼風格\n" +
-                "• .troll [1/2/3/all] shake    -> 讓玩家螢幕發瘋震動\n" +
-                "• .troll [1/2/3/all] reverse  -> 遊戲畫面直接上下顛倒 180 度\n" +
-                "• .troll [1/2/3/all] flash    -> 蹦迪霓虹燈閃爍效果\n" +
-                "• .clear [1/2/3/all]          -> 清除所有惡搞狀態，恢復原狀\n\n" +
-                "【🔥 新增神祕瘋狂密令】\n" +
-                "• .freeze [1/2/3/all]      -> 鎖定玩家畫面，顯示壓力過載按了沒反應\n" +
-                "• .rickroll [1/2/3/all]    -> 強制改名 Rick Astley 並開啟神曲歌詞迷因\n" +
-                "• .jackpot [1/2/3/all]     -> 直接灌入 9990 分，神不知鬼不覺霸榜\n" +
-                "• .boom [1/2/3/all]        -> 時間瞬間剩 3 秒並跳出毀滅性自毀警告\n\n" +
-                "【🔑 權限切換類】\n" +
-                "• begin player [1/2/3]\n" +
+                "• .w [編號/all] [訊息]    -> 玩家畫面上跳出通知跑馬燈\n\n" +
+                "【🎭 惡搞彩蛋類】\n" +
+                "• .troll [編號/all] matrix/shake/reverse/flash\n" +
+                "• .clear [編號/all]         -> 清除惡搞狀態\n\n" +
+                "【🔥 神祕密令】\n" +
+                "• .freeze / .rickroll / .jackpot / .boom\n\n" +
+                "【🔑 權限切換】\n" +
+                "• begin player [編號]\n" +
                 "• logout admin"
             );
         }
 
-// ======= 💻 黑客帝國超級指令後台核心系統 =======
-        // 警告：以下代碼包含高濃度的惡搞因子與未知的魔法。
-        // 如果執行時 iPad 突然開始跳舞，那是正常現象，請保持冷靜。
         function submitAdminCmd() {
-            if (!isAdmin) return; // 物理阻止非管理員的偷看行為
+            if (!isAdmin) return;
             const input = document.getElementById('cmds-input');
             const rawCmd = input.value.trim();
             input.value = '';
 
-            // 登出後台：假裝一切都沒發生過，溜了溜了
             if (rawCmd.toLowerCase() === 'logout admin') {
                 performLogoutLogic();
                 alert("管理員已成功登出。");
                 return;
             }
 
-            // 修改全局計數器：隨意操縱家長流水號的上帝之手
             if (rawCmd.startsWith('.setcount ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 2) {
@@ -866,43 +901,42 @@
                     if (!isNaN(newCount)) {
                         database.ref('massage_state').update({ globalParentCounter: newCount });
                         alert("全局家長計數已設定為: " + newCount);
-                    } else { alert("請輸入正確的數字！"); }
+                    }
                 }
                 return;
             }
 
-            // 踢人就座：強制把家長趕回「確認就座」畫面
             if (rawCmd.startsWith('.next ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 2) {
                     const target = parts[1].toLowerCase();
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ needsSeat: true, isRunning: false });
-                    } else if (['1', '2', '3'].includes(target)) {
-                        database.ref('massage_state/players/' + target).update({ needsSeat: true, isRunning: false });
-                    } else { alert("找不到該玩家！"); }
+                        for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ needsSeat: true, isRunning: false });
+                    } else {
+                        let num = parseInt(target);
+                        if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ needsSeat: true, isRunning: false });
+                    }
                 }
                 return;
             }
 
-            // 操控時間：掌控時間維度的神祕代碼
             if (rawCmd.startsWith('.set ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
                     const target = parts[1].toLowerCase();
                     const seconds = parseInt(parts[2]);
-                    if (isNaN(seconds)) { alert("請輸入正確的時間秒數！"); return; }
-
-                    if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ seconds: seconds });
-                    } else if (['1', '2', '3'].includes(target)) {
-                        database.ref('massage_state/players/' + target).update({ seconds: seconds });
-                    } else { alert("找不到該玩家！"); }
+                    if (!isNaN(seconds)) {
+                        if (target === 'all') {
+                            for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ seconds: seconds });
+                        } else {
+                            let num = parseInt(target);
+                            if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ seconds: seconds });
+                        }
+                    }
                 }
                 return;
             }
 
-            // 廣播跑馬燈：在玩家畫面上塞滿垃圾訊息的絕佳管道
             if (rawCmd.startsWith('.w ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
@@ -910,15 +944,15 @@
                     const messageText = parts.slice(2).join(' ');
 
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ msg: messageText });
-                    } else if (['1', '2', '3'].includes(target)) {
-                        database.ref('massage_state/players/' + target).update({ msg: messageText });
-                    } else { alert("找不到該玩家！"); }
+                        for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ msg: messageText });
+                    } else {
+                        let num = parseInt(target);
+                        if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ msg: messageText });
+                    }
                 }
                 return;
             }
 
-            // 視覺惡搞：顛倒、震動、蹦迪全靠它
             if (rawCmd.startsWith('.troll ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 3) {
@@ -926,111 +960,47 @@
                     const trollType = parts[2].toLowerCase();
 
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ effect: trollType });
-                    } else if (['1', '2', '3'].includes(target)) {
-                        database.ref('massage_state/players/' + target).update({ effect: trollType });
-                    } else { alert("找不到該玩家！"); }
+                        for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ effect: trollType });
+                    } else {
+                        let num = parseInt(target);
+                        if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ effect: trollType });
+                    }
                 }
                 return;
             }
 
-            // 一鍵還原：惡搞完之後假裝若無其事的終極防護罩
             if (rawCmd.startsWith('.clear ')) {
                 const parts = rawCmd.split(' ');
                 if (parts.length >= 2) {
                     const target = parts[1].toLowerCase();
                     if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ effect: "", msg: "" });
-                    } else if (['1', '2', '3'].includes(target)) {
-                        database.ref('massage_state/players/' + target).update({ effect: "", msg: "" });
-                    } else { alert("找不到該玩家！"); }
+                        for(let i=1;i<=MAX_PLAYERS;i++) database.ref('massage_state/players/' + i).update({ effect: "", msg: "" });
+                    } else {
+                        let num = parseInt(target);
+                        if (!isNaN(num)) database.ref('massage_state/players/' + num).update({ effect: "", msg: "" });
+                    }
                 }
                 return;
             }
 
-            // ======= 🌟 【核心惡搞密令升級區】 🌟 =======
-            
-            // .freeze 密令：讓家長體會一下什麼叫「點到螢幕快破了都沒反應」的定身術
-            if (rawCmd.startsWith('.freeze ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 2) {
-                    const target = parts[1].toLowerCase();
-                    const msgText = "⚠️ 系統偵測到壓力過載，功能暫時鎖定！請勿拍打餵食螢幕！";
-                    if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ effect: "matrix", msg: msgText });
-                    } else if (['1', '2', '3'].includes(target)) {
-                        database.ref('massage_state/players/' + target).update({ effect: "matrix", msg: msgText });
-                    } else { alert("找不到該玩家！"); }
-                }
-                return;
-            }
-
-            // .rickroll 密令：網路上最偉大的迷因突襲，讓家長的名字變成 Rick Astley
-            if (rawCmd.startsWith('.rickroll ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 2) {
-                    const target = parts[1].toLowerCase();
-                    const trollMsg = "🎵 Never gonna give you up, never gonna let you down~ 🎵";
-                    if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ msg: trollMsg, displayName: "Rick Astley" });
-                    } else if (['1', '2', '3'].includes(target)) {
-                        database.ref('massage_state/players/' + target).update({ msg: trollMsg, displayName: "Rick Astley" });
-                    } else { alert("找不到該玩家！"); }
-                }
-                return;
-            }
-
-            // .jackpot 密令：一鍵修改分數，強行灌入 9990 分直接霸榜，內定冠軍專用
-            if (rawCmd.startsWith('.jackpot ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 2) {
-                    const target = parts[1].toLowerCase();
-                    if (target === 'all') {
-                        for(let i=1;i<=3;i++) uploadScoreToGameLeaderboard('shoot', 'PLAYER'+i, 9990);
-                    } else if (['1', '2', '3'].includes(target)) {
-                        uploadScoreToGameLeaderboard('shoot', 'PLAYER'+target, 9990);
-                    } else { alert("找不到該玩家！"); }
-                    alert("💥 刷榜成功！已強行在排行榜寫入 9990 分！");
-                }
-                return;
-            }
-
-            // .boom 密令：給磨磨蹭蹭的家長一點小小的時間震撼，強制殘血倒數 3 秒！
-            if (rawCmd.startsWith('.boom ')) {
-                const parts = rawCmd.split(' ');
-                if (parts.length >= 2) {
-                    const target = parts[1].toLowerCase();
-                    const panicMsg = "🚨 警告：按摩椅偵測到不可抗力因素，即將啟動自毀引爆倒數！！";
-                    if (target === 'all') {
-                        for(let i=1;i<=3;i++) database.ref('massage_state/players/' + i).update({ seconds: 3, msg: panicMsg });
-                    } else if (['1', '2', '3'].includes(target)) {
-                        database.ref('massage_state/players/' + target).update({ seconds: 3, msg: panicMsg });
-                    } else { alert("找不到該玩家！"); }
-                }
-                return;
-            }
-            
-            // ======= 🌟 【新密令結束】 🌟 =======
-
-            // 快速通道：強制登入成玩家的傳送門
-            if (rawCmd.toLowerCase().startsWith('begin player ')) {
-                const num = rawCmd.toLowerCase().replace('begin player ', '').trim();
-                if (['1', '2', '3'].includes(num)) {
-                    database.ref('massage_state/players/' + num).update({ loggedIn: true, needsSeat: false });
-                    
-                    localStorage.setItem('game_currentUser', 'PLAYER' + num);
-                    localStorage.setItem('game_isAdmin', 'false');
-                    currentUser = 'PLAYER' + num; isAdmin = false;
-                    setupInterfaceBasedOnRole(); switchView('main-menu');
-                }
-                return;
-            } 
-
-            // 終極嘲諷：如果你打錯字，這行代碼會對你翻白眼
-            alert("未知密令。別亂猜，可以點擊上面的 See all cmds 按鈕查看喔！");
+            alert("未知密令。可以點擊 See all cmds 查看！");
         }
 
         setupInterfaceBasedOnRole();
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const btn = document.getElementById('theme-toggle');
+            if (document.body.classList.contains('dark-mode')) {
+                btn.innerHTML = '☀️ 普通模式';
+                btn.style.backgroundColor = '#ecf0f1';
+                btn.style.color = '#121212';
+            } else {
+                btn.innerHTML = '🌙 舒壓暗黑模式';
+                btn.style.backgroundColor = '#333';
+                btn.style.color = '#fff';
+            }
+        }
     </script>
 </body>
 </html>
